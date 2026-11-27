@@ -1,0 +1,100 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMONG US CREW ATTENDANCE</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ background:#080d1c;
+ color:white;
+ font-family:Arial,sans-serif;
+ text-align:center;
+}
+header{
+ background:#141d35;
+ padding:25px 12px;
+ border-bottom:3px solid #e33b48;
+}
+h1{font-size:23px;color:#ff4655}
+.container{
+ max-width:430px;
+ margin:25px auto;
+ padding:20px;
+}
+.panel{
+ background:#17233d;
+ border:1px solid #354667;
+ border-radius:15px;
+ padding:22px;
+ margin-bottom:20px;
+}
+.crew{
+ font-size:65px;
+ margin:10px;
+}
+select,input,button{
+ width:100%;
+ padding:14px;
+ margin-top:12px;
+ border-radius:9px;
+ border:none;
+ font-size:16px;
+}
+button{
+ background:#e33b48;
+ color:white;
+ font-weight:bold;
+ cursor:pointer;
+}
+button:active{opacity:.7}
+.note{color:#aab7d0;font-size:13px}
+#message{margin-top:15px;color:#75e6a2}
+</style>
+</head>
+<body>
+<header>
+<h1>AMONG US</h1>
+<div>CREW ATTENDANCE SYSTEM</div>
+</header>
+
+<div class="container">
+<div class="panel">
+<div class="crew">🚀</div>
+<h2>CREW CHECK-IN</h2>
+<p>今日の出席を申請しよう</p>
+
+<select id="member">
+<option value="">メンバーを選択</option>
+<option>テストメンバー</option>
+</select>
+
+<button onclick="submitAttendance()">出席を申請する</button>
+<div id="message"></div>
+</div>
+
+<div class="panel">
+<h3>MISSION STATUS</h3>
+<p>出席申請を送信すると、管理者が確認します。</p>
+<p class="note">承認された出席のみ集計されます。</p>
+</div>
+</div>
+
+<script>
+function submitAttendance(){
+ const name=document.getElementById("member").value;
+ const message=document.getElementById("message");
+
+ if(!name){
+  message.textContent="メンバーを選択してください";
+  return;
+ }
+
+ message.textContent=name+" さんの申請を受け付けました！（仮表示）";
+}
+</script>
+</body>
+</html>
