@@ -209,7 +209,7 @@ async function start(){
  }
 }
 
-/* 同じメンバー・同じ日の申請は同じIDを使用する */
+/* 出席申請：同じメンバー・同じ日には同じIDを使う */
 $("apply").onclick=async()=>{
  const id=$("member").value;
  const name=$("member").selectedOptions[0]?.textContent;
@@ -220,17 +220,11 @@ $("apply").onclick=async()=>{
  }
 
  $("apply").disabled=true;
- msg("申請を確認しています...");
+ msg("申請しています...");
 
  try{
   const requestId=id+"_"+today();
   const ref=doc(db,"attendance_requests",requestId);
-  const existing=await getDoc(ref);
-
-  if(existing.exists()){
-   msg("今日はすでに申請済みです！");
-   return;
-  }
 
   await setDoc(ref,{
    memberId:id,
@@ -244,9 +238,9 @@ $("apply").onclick=async()=>{
   msg("出席申請できました！");
  }catch(e){
   if(e.code==="permission-denied"){
-   msg("今日はすでに申請済みか、申請できません。");
+   msg("今日はすでに申請済みです！");
   }else{
-   msg("申請できません："+e.message);
+   msg("申請エラー："+e.message);
   }
  }finally{
   $("apply").disabled=false;
