@@ -46,57 +46,65 @@ button:disabled{opacity:.4}
 hr{border:0;border-top:1px solid #405477;margin:18px 0}
 
 /* ランキング */
-.rank-search{
- margin:13px 0;
-}
+.rank-search{margin:13px 0}
 .rank-summary{
  display:flex;justify-content:space-between;align-items:center;
  background:#101b30;border-radius:10px;padding:12px;
- margin:12px 0;font-size:13px;color:#b9c9e5;
+ margin:12px 0;font-size:13px;color:#b9c9e5
 }
 .rank-card{
  background:#263958;border:1px solid #405477;
- border-radius:11px;padding:12px;margin:8px 0;
+ border-radius:11px;padding:12px;margin:8px 0
 }
 .rank-card.top1{border:2px solid #ffd66b;background:#403b2b}
 .rank-card.top2{border:2px solid #b9c8d8}
 .rank-card.top3{border:2px solid #bd8b62}
 .rank-top{
- display:flex;align-items:center;gap:10px;
+ display:flex;align-items:center;gap:10px
 }
 .rank-number{
  min-width:43px;height:43px;border-radius:10px;
  display:flex;align-items:center;justify-content:center;
- background:#17243c;color:#ffd66b;font-size:18px;font-weight:bold;
+ background:#17243c;color:#ffd66b;font-size:18px;font-weight:bold
 }
 .top1 .rank-number{background:#ffd66b;color:#382b0a}
 .top2 .rank-number{background:#b9c8d8;color:#17243c}
 .top3 .rank-number{background:#bd8b62;color:#17243c}
 .rank-name{
  flex:1;min-width:0;font-size:15px;font-weight:bold;
- overflow-wrap:anywhere;
+ overflow-wrap:anywhere
 }
 .rank-rate{
  font-size:21px;font-weight:bold;color:#ffd66b;
- white-space:nowrap;
+ white-space:nowrap
 }
 .rank-detail{
  display:flex;justify-content:space-between;
- color:#b9c9e5;font-size:12px;margin-top:9px;
+ color:#b9c9e5;font-size:12px;margin-top:9px
 }
 .rank-bar{
  height:9px;background:#101b30;border-radius:20px;
- overflow:hidden;margin-top:8px;
+ overflow:hidden;margin-top:8px
 }
 .rank-fill{
  height:100%;background:linear-gradient(90deg,#e94352,#ffd66b);
- border-radius:20px;transition:width .3s;
+ border-radius:20px;transition:width .3s
 }
 .rank-empty{
- text-align:center;padding:20px;color:#a9badc;
+ text-align:center;padding:20px;color:#a9badc
 }
-.rank-count{
- color:#ffd66b;font-weight:bold;
+.rank-count{color:#ffd66b;font-weight:bold}
+.rank-more{
+ margin:12px 0;background:#405477;
+ border:1px solid #647a9e
+}
+.worst-title{
+ color:#ff8993;font-size:14px;font-weight:bold;
+ margin:22px 0 8px
+}
+.worst-card{
+ background:#382632;border:1px solid #a64b5c;
+ border-radius:11px;padding:12px;margin:8px 0
 }
 </style>
 </head>
@@ -244,6 +252,7 @@ let rankingStartDate=DEFAULT_START_DATE;
 let publicMode="ranking";
 let authCheckRunning=false;
 let rankingSearch="";
+let rankingExpanded=false;
 
 function msg(t){$("message").textContent=t}
 
@@ -440,7 +449,57 @@ function getEligibleDates(){
  return dates;
 }
 
-/* 見やすいランキング */
+/* ランキングカード */
+function makeRankCard(x,rank,dates){
+ const card=document.createElement("div");
+ card.className="rank-card";
+
+ if(rank===1)card.classList.add("top1");
+ if(rank===2)card.classList.add("top2");
+ if(rank===3)card.classList.add("top3");
+
+ const top=document.createElement("div");
+ top.className="rank-top";
+
+ const number=document.createElement("div");
+ number.className="rank-number";
+ number.textContent=rank===1?"🥇":rank===2?"🥈":rank===3?"🥉":rank+"位";
+
+ const name=document.createElement("div");
+ name.className="rank-name";
+ name.textContent=x.name;
+
+ const rate=document.createElement("div");
+ rate.className="rank-rate";
+ rate.textContent=x.rate.toFixed(1)+"%";
+
+ top.append(number,name,rate);
+
+ const detail=document.createElement("div");
+ detail.className="rank-detail";
+
+ const count=document.createElement("span");
+ count.textContent="出席 "+x.count+"日";
+
+ const total=document.createElement("span");
+ total.textContent="対象 "+dates.length+"日";
+
+ detail.append(count,total);
+
+ const bar=document.createElement("div");
+ bar.className="rank-bar";
+
+ const fill=document.createElement("div");
+ fill.className="rank-fill";
+ fill.style.width=Math.min(100,x.rate)+"%";
+
+ bar.append(fill);
+ card.append(top,detail,bar);
+
+ return card;
+}
+
+/* ランキング表示 */
 function renderRanking(area){
  const dates=getEligibleDates();
 
@@ -460,23 +519,29 @@ function renderRanking(area){
   };
  });
 
- ranking.sort((a,b)=>b.rate-a.rate||b.count-a.count||a.name.localeCompare(b.name,"ja"));
+ ranking.sort((a,b)=>
+  b.rate-a.rate||b.count-a.count||a.name.localeCompare(b.name,"ja")
+ );
 
  const search=document.createElement("input");
  search.type="search";
  search.className="rank-search";
  search.placeholder="🔍 名前でメンバーを検索";
  search.value=rankingSearch;
+ search.id="rankingSearch";
+
  search.addEventListener("input",()=>{
   rankingSearch=search.value;
+  rankingExpanded=false;
   renderPublicData();
+
   const newSearch=$("rankingSearch");
   if(newSearch){
    newSearch.focus();
    newSearch.setSelectionRange(newSearch.value.length,newSearch.value.length);
   }
  });
- search.id="rankingSearch";
+
  area.append(search);
 
  const filtered=ranking.filter(x=>
@@ -511,55 +576,62 @@ function renderRanking(area){
   return;
  }
 
- filtered.forEach(x=>{
-  const i=ranking.indexOf(x);
-  const rank=i+1;
+ /* トップ5 */
+ const topFive=filtered.slice(0,5);
 
-  const card=document.createElement("div");
-  card.className="rank-card";
-  if(rank===1)card.classList.add("top1");
-  if(rank===2)card.classList.add("top2");
-  if(rank===3)card.classList.add("top3");
-
-  const top=document.createElement("div");
-  top.className="rank-top";
-
-  const number=document.createElement("div");
-  number.className="rank-number";
-  number.textContent=rank===1?"🥇":rank===2?"🥈":rank===3?"🥉":rank+"位";
-
-  const name=document.createElement("div");
-  name.className="rank-name";
-  name.textContent=x.name;
-
-  const rate=document.createElement("div");
-  rate.className="rank-rate";
-  rate.textContent=x.rate.toFixed(1)+"%";
-
-  top.append(number,name,rate);
-
-  const detail=document.createElement("div");
-  detail.className="rank-detail";
-
-  const count=document.createElement("span");
-  count.textContent="出席 "+x.count+"日";
-
-  const total=document.createElement("span");
-  total.textContent="対象 "+dates.length+"日";
-
-  detail.append(count,total);
-
-  const bar=document.createElement("div");
-  bar.className="rank-bar";
-
-  const fill=document.createElement("div");
-  fill.className="rank-fill";
-  fill.style.width=Math.min(100,x.rate)+"%";
-
-  bar.append(fill);
-  card.append(top,detail,bar);
-  area.append(card);
+ topFive.forEach(x=>{
+  const rank=ranking.indexOf(x)+1;
+  area.append(makeRankCard(x,rank,dates));
  });
+
+ /* 6位以下の詳細 */
+ const hasMore=filtered.length>6;
+
+ if(hasMore){
+  const detailButton=document.createElement("button");
+  detailButton.className="rank-more";
+  detailButton.textContent=rankingExpanded
+   ?"▲ 詳細を閉じる"
+   :"▼ 詳細を見る（6位以下 "+(filtered.length-6)+"人）";
+
+  detailButton.onclick=()=>{
+   rankingExpanded=!rankingExpanded;
+   renderPublicData();
+  };
+
+  area.append(detailButton);
+
+  if(rankingExpanded){
+   filtered.slice(5,-1).forEach(x=>{
+    const rank=ranking.indexOf(x)+1;
+    area.append(makeRankCard(x,rank,dates));
+   });
+
+   const closeButton=document.createElement("button");
+   closeButton.className="rank-more";
+   closeButton.textContent="▲ 詳細を閉じる";
+   closeButton.onclick=()=>{
+    rankingExpanded=false;
+    renderPublicData();
+   };
+   area.append(closeButton);
+  }
+ }
+
+ /* ワースト1位は常に別枠 */
+ if(filtered.length>5){
+  const worst=filtered[filtered.length-1];
+  const worstRank=ranking.indexOf(worst)+1;
+
+  const title=document.createElement("div");
+  title.className="worst-title";
+  title.textContent="💀 WORST 1";
+
+  const card=makeRankCard(worst,worstRank,dates);
+  card.className="worst-card";
+
+  area.append(title,card);
+ }
 }
 
 function renderPublicData(){
@@ -600,6 +672,7 @@ function renderPublicData(){
 
 $("showRanking").onclick=()=>{
  publicMode="ranking";
+ rankingExpanded=false;
  renderPublicData();
 };
 
