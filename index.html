@@ -7,39 +7,29 @@
 <title>AMONG US CREW ATTENDANCE</title>
 <style>
 *{box-sizing:border-box}
-body{
- margin:0;padding:18px;color:#fff;font-family:Arial,sans-serif;
- background:radial-gradient(circle at top,#243b62,#080d19 70%);
- min-height:100vh
-}
-.container{max-width:600px;margin:auto}
+body{margin:0;padding:16px;color:white;font-family:Arial,sans-serif;background:radial-gradient(circle at top,#243b62,#080d19 70%);min-height:100vh}
+.container{max-width:650px;margin:auto}
 header{text-align:center;padding:15px}
 h1{color:#ff4655;font-size:25px}
 header p{color:#a9badc}
-.panel{
- background:#17243c;border:1px solid #405477;
- border-radius:15px;padding:17px;margin:15px 0;
- box-shadow:0 7px 22px #0007
-}
+.panel{background:#17243c;border:1px solid #405477;border-radius:15px;padding:17px;margin:15px 0;box-shadow:0 7px 22px #0007}
 h2{color:#ff6470;font-size:19px}
-input,select,button{
- width:100%;padding:12px;margin:6px 0;
- border:1px solid #647a9e;border-radius:8px;font-size:15px
-}
+input,select,button{width:100%;padding:12px;margin:6px 0;border:1px solid #647a9e;border-radius:8px;font-size:15px}
 button{background:#e94352;color:white;border:0;font-weight:bold}
 button.secondary{background:#405477}
 button.danger{background:#7e3441}
 button:disabled{opacity:.5}
 .hidden{display:none!important}
-.item{
- background:#263958;padding:12px;margin:9px 0;
- border-radius:9px;overflow-wrap:anywhere
-}
+.item{background:#263958;padding:12px;margin:9px 0;border-radius:9px;overflow-wrap:anywhere}
 .actions{display:flex;gap:8px}
 .actions button{flex:1}
 .stat{padding:8px 0;border-bottom:1px solid #405477}
 #message{color:#ffd66b;text-align:center;min-height:25px}
 .small{font-size:12px;color:#a9badc}
+.tabs{display:flex;gap:7px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:100px}
+.rank{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.rank strong{color:#ffd66b}
 </style>
 </head>
 <body>
@@ -56,6 +46,15 @@ button:disabled{opacity:.5}
 <option value="">メンバーを読み込み中...</option>
 </select>
 <button id="apply">出席を申請する</button>
+</div>
+
+<div class="panel">
+<h2>🌟 CREW PUBLIC DATA</h2>
+<div class="tabs">
+<button id="showRanking" class="secondary">🏆 ランキング</button>
+<button id="showHistory" class="secondary">📋 出席履歴</button>
+</div>
+<div id="publicData">読み込み中...</div>
 </div>
 
 <div class="panel">
@@ -83,13 +82,7 @@ button:disabled{opacity:.5}
 </div>
 
 <div class="panel">
-<h2>🏆 出席率ランキング</h2>
-<p class="small">休日・テスト期間を除いた日数で計算</p>
-<div id="ranking">集計中...</div>
-</div>
-
-<div class="panel">
-<h2>⚙️ 集計開始日の設定</h2>
+<h2>🏆 出席率ランキング設定</h2>
 <p class="small">この日から出席率の集計を開始します。</p>
 <input type="date" id="rankingStart">
 <button id="saveRankingStart">集計開始日を保存</button>
@@ -97,9 +90,8 @@ button:disabled{opacity:.5}
 
 <div class="panel">
 <h2>📅 休日管理</h2>
-<label>休日の日付</label>
 <input type="date" id="holidayDate">
-<input id="holidayName" placeholder="休日の名前（任意）">
+<input id="holidayName" placeholder="休日の名前">
 <button id="addHoliday">休日を登録</button>
 <div id="holidays"></div>
 </div>
@@ -156,9 +148,11 @@ const $=id=>document.getElementById(id);
 let admin=false;
 let memberCache=[];
 let requestCache=[];
+let publicCache=[];
 let holidayCache=[];
 let testCache=[];
 let rankingStartDate=DEFAULT_START_DATE;
+let publicMode="ranking";
 
 function msg(t){$("message").textContent=t}
 
@@ -174,10 +168,12 @@ function dateText(timestamp){
  return timestamp.toDate().toLocaleDateString("ja-JP");
 }
 
+/* メンバー */
 async function loadMembers(){
  const snap=await getDocs(collection(db,"members"));
  memberCache=[];
  const select=$("member");
+ const oldValue=select.value;
  select.innerHTML='<option value="">メンバーを選択</option>';
 
  snap.forEach(d=>{
@@ -189,27 +185,158 @@ async function loadMembers(){
   select.appendChild(o);
  });
 
+ if(memberCache.some(m=>m.id===oldValue))select.value=oldValue;
  if(admin)renderMembers();
 }
 
-async function loadRankingStart(){
- const snap=await getDoc(doc(db,"settings","attendance"));
- rankingStartDate=snap.exists()
-  ?snap.data().startDate||DEFAULT_START_DATE
+/* 公開用データ */
+async function loadPublicData(){
+ const results=await Promise.all([
+  getDocs(collection(db,"public_attendance")),
+  getDocs(collection(db,"holidays")),
+  getDocs(collection(db,"test_periods")),
+  getDoc(doc(db,"settings","attendance"))
+ ]);
+
+ publicCache=[];
+ results[0].forEach(d=>publicCache.push({id:d.id,...d.data()}));
+
+ holidayCache=[];
+ results[1].forEach(d=>holidayCache.push({id:d.id,...d.data()}));
+
+ testCache=[];
+ results[2].forEach(d=>testCache.push({id:d.id,...d.data()}));
+
+ rankingStartDate=results[3].exists()
+  ?results[3].data().startDate||DEFAULT_START_DATE
   :DEFAULT_START_DATE;
- $("rankingStart").value=rankingStartDate;
+
+ renderPublicData();
 }
 
-async function start(){
- try{
-  if(!auth.currentUser)await signInAnonymously(auth);
-  await loadMembers();
- }catch(e){
-  msg("接続エラー："+e.message);
+/* 管理者の承認済み記録を公開用コレクションへ同期 */
+async function syncPublicAttendance(){
+ for(const r of requestCache){
+  const ref=doc(db,"public_attendance",r.id);
+
+  if(r.status==="approved"){
+   await setDoc(ref,{
+    memberId:r.memberId||"",
+    name:r.name||"名前不明",
+    attendanceDate:r.attendanceDate||"",
+    status:"approved",
+    createdAt:r.createdAt||serverTimestamp()
+   });
+  }else{
+   await deleteDoc(ref).catch(()=>{});
+  }
  }
 }
 
-/* 出席申請：同じメンバー・同じ日には同じIDを使う */
+function isExcluded(date){
+ if(holidayCache.some(x=>x.date===date))return true;
+ return testCache.some(x=>date>=x.start&&date<=x.end);
+}
+
+function getEligibleDates(){
+ const dates=[];
+ const begin=new Date(rankingStartDate+"T12:00:00");
+ const end=new Date(today()+"T12:00:00");
+
+ if(begin>end)return dates;
+
+ for(let d=new Date(begin);d<=end;d.setDate(d.getDate()+1)){
+  const key=d.getFullYear()+"-"+
+   String(d.getMonth()+1).padStart(2,"0")+"-"+
+   String(d.getDate()).padStart(2,"0");
+  if(!isExcluded(key))dates.push(key);
+ }
+ return dates;
+}
+
+function renderPublicData(){
+ const area=$("publicData");
+ area.innerHTML="";
+
+ if(publicMode==="ranking"){
+  const dates=getEligibleDates();
+  const ranking=memberCache.map(m=>{
+   const attended=new Set(
+    publicCache
+     .filter(r=>r.memberId===m.id&&r.status==="approved")
+     .map(r=>r.attendanceDate)
+     .filter(d=>d&&dates.includes(d))
+   );
+   return {
+    name:m.name,
+    count:attended.size,
+    rate:dates.length?attended.size/dates.length*100:0
+   };
+  });
+
+  ranking.sort((a,b)=>b.rate-a.rate||b.count-a.count);
+
+  const summary=document.createElement("div");
+  summary.className="stat";
+  summary.textContent="集計対象日数："+dates.length+"日";
+  area.append(summary);
+
+  if(!ranking.length){
+   area.textContent="メンバーがまだ登録されていません";
+  }
+
+  ranking.forEach((x,i)=>{
+   const item=document.createElement("div");
+   item.className="item rank";
+
+   const name=document.createElement("strong");
+   name.textContent=(i+1)+"位 "+x.name;
+
+   const score=document.createElement("span");
+   score.textContent=x.count+"日 / "+x.rate.toFixed(1)+"%";
+
+   item.append(name,score);
+   area.append(item);
+  });
+ }else{
+  const records=[...publicCache]
+   .filter(r=>r.status==="approved"&&r.attendanceDate)
+   .sort((a,b)=>b.attendanceDate.localeCompare(a.attendanceDate));
+
+  if(!records.length){
+   area.textContent="承認済みの出席履歴はありません";
+   return;
+  }
+
+  records.forEach(r=>{
+   const item=document.createElement("div");
+   item.className="item";
+
+   const name=document.createElement("strong");
+   name.textContent=r.name||"名前不明";
+
+   const date=document.createElement("p");
+   date.textContent="出席日："+r.attendanceDate;
+
+   const status=document.createElement("span");
+   status.textContent="承認済み ✓";
+
+   item.append(name,date,status);
+   area.append(item);
+  });
+ }
+}
+
+$("showRanking").onclick=()=>{
+ publicMode="ranking";
+ renderPublicData();
+};
+$("showHistory").onclick=()=>{
+ publicMode="history";
+ renderPublicData();
+};
+
+/* 出席申請 */
 $("apply").onclick=async()=>{
  const id=$("member").value;
  const name=$("member").selectedOptions[0]?.textContent;
@@ -224,9 +351,8 @@ $("apply").onclick=async()=>{
 
  try{
   const requestId=id+"_"+today();
-  const ref=doc(db,"attendance_requests",requestId);
 
-  await setDoc(ref,{
+  await setDoc(doc(db,"attendance_requests",requestId),{
    memberId:id,
    name,
    uid:auth.currentUser.uid,
@@ -238,7 +364,7 @@ $("apply").onclick=async()=>{
   msg("出席申請できました！");
  }catch(e){
   if(e.code==="permission-denied"){
-   msg("今日はすでに申請済みです！");
+   msg("今日はすでに申請済みか、申請できません。");
   }else{
    msg("申請エラー："+e.message);
   }
@@ -247,6 +373,7 @@ $("apply").onclick=async()=>{
  }
 };
 
+/* ログイン */
 $("login").onclick=async()=>{
  try{
   const result=await signInWithEmailAndPassword(
@@ -259,9 +386,6 @@ $("login").onclick=async()=>{
    return;
   }
 
-  admin=true;
-  showAdmin();
-  await refreshAll();
   msg("管理者ログイン成功！");
  }catch(e){
   msg("ログイン失敗："+e.message);
@@ -274,8 +398,7 @@ function showAdmin(){
  $("login").classList.toggle("hidden",admin);
  $("email").classList.toggle("hidden",admin);
  $("password").classList.toggle("hidden",admin);
- $("adminStatus").textContent=
-  admin?"管理者ログイン中":"ログインしていません";
+ $("adminStatus").textContent=admin?"管理者ログイン中":"ログインしていません";
 }
 
 $("logout").onclick=async()=>{
@@ -285,8 +408,7 @@ $("logout").onclick=async()=>{
  msg("ログアウトしました");
 };
 
-$("refresh").onclick=refreshAll;
-
+/* 申請一覧 */
 async function loadRequests(){
  const area=$("requests");
  area.textContent="読み込み中...";
@@ -313,8 +435,7 @@ async function loadRequests(){
   title.textContent=x.name||"名前不明";
 
   const info=document.createElement("p");
-  info.textContent="状態："+(x.status||"不明")+
-   " / 日付："+(x.attendanceDate||dateText(x.createdAt));
+  info.textContent="状態："+(x.status||"不明")+" / 日付："+(x.attendanceDate||dateText(x.createdAt));
 
   item.append(title,info);
 
@@ -342,6 +463,23 @@ async function loadRequests(){
 async function changeStatus(id,status){
  try{
   await updateDoc(doc(db,"attendance_requests",id),{status});
+
+  const original=requestCache.find(r=>r.id===id);
+  if(original){
+   const publicRef=doc(db,"public_attendance",id);
+   if(status==="approved"){
+    await setDoc(publicRef,{
+     memberId:original.memberId||"",
+     name:original.name||"名前不明",
+     attendanceDate:original.attendanceDate||"",
+     status:"approved",
+     createdAt:original.createdAt||serverTimestamp()
+    });
+   }else{
+    await deleteDoc(publicRef).catch(()=>{});
+   }
+  }
+
   msg(status==="approved"?"承認しました":"却下しました");
   await refreshAll();
  }catch(e){
@@ -349,6 +487,7 @@ async function changeStatus(id,status){
  }
 }
 
+/* メンバー管理 */
 async function renderMembers(){
  const area=$("membersAdmin");
  area.innerHTML="";
@@ -366,7 +505,6 @@ async function renderMembers(){
 
   del.onclick=async()=>{
    if(!confirm(x.name+"を削除しますか？"))return;
-
    try{
     await deleteDoc(doc(db,"members",x.id));
     msg("メンバーを削除しました");
@@ -398,22 +536,17 @@ $("addMember").onclick=async()=>{
  }
 };
 
+/* 休日 */
 async function loadHolidays(){
- const snap=await getDocs(collection(db,"holidays"));
- holidayCache=[];
- snap.forEach(d=>holidayCache.push({id:d.id,...d.data()}));
-
  const area=$("holidays");
  area.innerHTML="";
-
- holidayCache.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 
  holidayCache.forEach(x=>{
   const item=document.createElement("div");
   item.className="item";
 
   const text=document.createElement("span");
-  text.textContent=(x.date||"日付不明")+" "+(x.name||"休日");
+  text.textContent=(x.date||"")+" "+(x.name||"休日");
 
   const del=document.createElement("button");
   del.className="danger";
@@ -427,10 +560,7 @@ async function loadHolidays(){
 
 $("addHoliday").onclick=async()=>{
  const date=$("holidayDate").value;
- if(!date){
-  msg("日付を選択してください");
-  return;
- }
+ if(!date){msg("日付を選択してください");return;}
 
  try{
   await addDoc(collection(db,"holidays"),{
@@ -438,20 +568,14 @@ $("addHoliday").onclick=async()=>{
    name:$("holidayName").value.trim()||"休日",
    createdAt:serverTimestamp()
   });
-
   $("holidayName").value="";
   msg("休日を登録しました");
   await refreshAll();
- }catch(e){
-  msg("休日を登録できません："+e.message);
- }
+ }catch(e){msg("休日を登録できません："+e.message);}
 };
 
+/* テスト期間 */
 async function loadTests(){
- const snap=await getDocs(collection(db,"test_periods"));
- testCache=[];
- snap.forEach(d=>testCache.push({id:d.id,...d.data()}));
-
  const area=$("tests");
  area.innerHTML="";
 
@@ -487,13 +611,10 @@ $("addTest").onclick=async()=>{
    name:$("testName").value.trim()||"テスト期間",
    createdAt:serverTimestamp()
   });
-
   $("testName").value="";
   msg("テスト期間を登録しました");
   await refreshAll();
- }catch(e){
-  msg("テスト期間を登録できません："+e.message);
- }
+ }catch(e){msg("テスト期間を登録できません："+e.message);}
 };
 
 async function removeRecord(col,id){
@@ -501,128 +622,74 @@ async function removeRecord(col,id){
   await deleteDoc(doc(db,col,id));
   msg("削除しました");
   await refreshAll();
- }catch(e){
-  msg("削除できません："+e.message);
- }
+ }catch(e){msg("削除できません："+e.message);}
 }
 
+/* 集計開始日 */
 $("saveRankingStart").onclick=async()=>{
  const date=$("rankingStart").value;
-
- if(!date){
-  msg("集計開始日を選択してください");
-  return;
- }
-
- if(date>today()){
-  msg("未来の日付は設定できません");
-  return;
- }
+ if(!date){msg("集計開始日を選択してください");return;}
+ if(date>today()){msg("未来の日付は設定できません");return;}
 
  try{
-  await setDoc(doc(db,"settings","attendance"),{
-   startDate:date
-  });
+  await setDoc(doc(db,"settings","attendance"),{startDate:date});
   rankingStartDate=date;
-  calculateRanking();
+  renderPublicData();
   msg("集計開始日を保存しました！");
- }catch(e){
-  msg("保存できません："+e.message);
- }
+ }catch(e){msg("保存できません："+e.message);}
 };
 
-function isExcluded(date){
- if(holidayCache.some(x=>x.date===date))return true;
- return testCache.some(x=>date>=x.start&&date<=x.end);
-}
-
-function calculateRanking(){
- const area=$("ranking");
- area.innerHTML="";
- const eligible=[];
- const dates=[];
-
- const begin=new Date(rankingStartDate+"T12:00:00");
- const end=new Date(today()+"T12:00:00");
-
- if(begin>end){
-  area.textContent="集計開始日を確認してください";
-  return;
- }
-
- for(let d=new Date(begin);d<=end;d.setDate(d.getDate()+1)){
-  const key=d.getFullYear()+"-"+
-   String(d.getMonth()+1).padStart(2,"0")+"-"+
-   String(d.getDate()).padStart(2,"0");
-
-  if(!isExcluded(key))dates.push(key);
- }
-
- memberCache.forEach(m=>{
-  const approved=new Set(
-   requestCache
-    .filter(r=>r.memberId===m.id&&r.status==="approved")
-    .map(r=>r.attendanceDate||"")
-    .filter(Boolean)
-  );
-
-  const count=[...approved].filter(d=>dates.includes(d)).length;
-  const rate=dates.length?count/dates.length*100:0;
-
-  eligible.push({name:m.name,count,rate});
- });
-
- eligible.sort((a,b)=>b.rate-a.rate||b.count-a.count);
-
- const summary=document.createElement("div");
- summary.className="stat";
- summary.textContent="集計対象日数："+dates.length+"日";
- area.append(summary);
-
- eligible.forEach((x,i)=>{
-  const item=document.createElement("div");
-  item.className="item";
-
-  const title=document.createElement("strong");
-  title.textContent=(i+1)+"位 "+x.name;
-
-  const detail=document.createElement("p");
-  detail.textContent=x.count+"日出席 / 出席率 "+x.rate.toFixed(1)+"%";
-
-  item.append(title,detail);
-  area.append(item);
- });
-}
-
+/* 管理者データ更新 */
 async function refreshAll(){
  if(!admin)return;
 
  try{
-  await Promise.all([
-   loadMembers(),
-   loadRequests(),
-   loadHolidays(),
-   loadTests(),
-   loadRankingStart()
-  ]);
-  calculateRanking();
+  await loadMembers();
+  const snap=await getDocs(query(
+   collection(db,"attendance_requests"),
+   orderBy("createdAt","desc")
+  ));
+
+  requestCache=[];
+  snap.forEach(d=>requestCache.push({id:d.id,...d.data()}));
+
+  await syncPublicAttendance();
+  await loadPublicData();
+  await loadRequests();
+  await loadHolidays();
+  await loadTests();
+
+  $("rankingStart").value=rankingStartDate;
  }catch(e){
   msg("データ取得エラー："+e.message);
  }
 }
 
-onAuthStateChanged(auth,user=>{
- if(user&&user.uid===ADMIN_UID){
+$("refresh").onclick=refreshAll;
+
+/* 認証状態に合わせて画面を準備 */
+onAuthStateChanged(auth,async user=>{
+ if(!user){
+  try{await signInAnonymously(auth);}
+  catch(e){msg("ログインできません："+e.message);}
+  return;
+ }
+
+ if(user.uid===ADMIN_UID){
   admin=true;
   showAdmin();
-  refreshAll().catch(e=>msg(e.message));
- }else if(admin){
+  await refreshAll();
+ }else{
   admin=false;
   showAdmin();
+  try{
+   await loadMembers();
+   await loadPublicData();
+  }catch(e){
+   msg("データを読み込めません："+e.message);
+  }
  }
 });
-
-start();
 </script>
 </body>
 </html>
