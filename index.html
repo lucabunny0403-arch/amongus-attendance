@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -7,8 +8,7 @@
 <style>
 *{box-sizing:border-box}
 body{
- margin:0;padding:18px;color:#fff;
- font-family:Arial,sans-serif;
+ margin:0;padding:18px;color:#fff;font-family:Arial,sans-serif;
  background:radial-gradient(circle at top,#243b62,#080d19 70%);
  min-height:100vh
 }
@@ -22,11 +22,9 @@ header p{color:#a9badc}
  box-shadow:0 7px 22px #0007
 }
 h2{color:#ff6470;font-size:19px}
-h3{color:#c8d8f5}
 input,select,button{
  width:100%;padding:12px;margin:6px 0;
- border:1px solid #647a9e;border-radius:8px;
- font-size:15px
+ border:1px solid #647a9e;border-radius:8px;font-size:15px
 }
 button{background:#e94352;color:white;border:0;font-weight:bold}
 button.secondary{background:#405477}
@@ -39,11 +37,7 @@ button:disabled{opacity:.5}
 }
 .actions{display:flex;gap:8px}
 .actions button{flex:1}
-.stat{
- display:flex;justify-content:space-between;
- padding:8px 0;border-bottom:1px solid #405477
-}
-.rank{font-size:20px;color:#ffd66b}
+.stat{padding:8px 0;border-bottom:1px solid #405477}
 #message{color:#ffd66b;text-align:center;min-height:25px}
 .small{font-size:12px;color:#a9badc}
 </style>
@@ -136,8 +130,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
 
 import {
- getFirestore,collection,getDocs,addDoc,serverTimestamp,
- doc,updateDoc,deleteDoc,query,orderBy,getDoc,setDoc
+ getFirestore,collection,getDocs,addDoc,setDoc,
+ serverTimestamp,doc,updateDoc,deleteDoc,query,
+ orderBy,getDoc
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const firebaseConfig={
@@ -156,7 +151,6 @@ const DEFAULT_START_DATE="2026-11-27";
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
 const db=getFirestore(app);
-
 const $=id=>document.getElementById(id);
 
 let admin=false;
@@ -170,7 +164,9 @@ function msg(t){$("message").textContent=t}
 
 function today(){
  const d=new Date();
- return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+ return d.getFullYear()+"-"+
+ String(d.getMonth()+1).padStart(2,"0")+"-"+
+ String(d.getDate()).padStart(2,"0");
 }
 
 function dateText(timestamp){
@@ -197,27 +193,23 @@ async function loadMembers(){
 }
 
 async function loadRankingStart(){
- const ref=doc(db,"settings","attendance");
- const snap=await getDoc(ref);
-
+ const snap=await getDoc(doc(db,"settings","attendance"));
  rankingStartDate=snap.exists()
-  ? snap.data().startDate||DEFAULT_START_DATE
-  : DEFAULT_START_DATE;
-
+  ?snap.data().startDate||DEFAULT_START_DATE
+  :DEFAULT_START_DATE;
  $("rankingStart").value=rankingStartDate;
 }
 
 async function start(){
  try{
-  if(!auth.currentUser){
-   await signInAnonymously(auth);
-  }
+  if(!auth.currentUser)await signInAnonymously(auth);
   await loadMembers();
  }catch(e){
   msg("接続エラー："+e.message);
  }
 }
 
+/* 同じメンバー・同じ日の申請は同じIDを使用する */
 $("apply").onclick=async()=>{
  const id=$("member").value;
  const name=$("member").selectedOptions[0]?.textContent;
@@ -228,10 +220,19 @@ $("apply").onclick=async()=>{
  }
 
  $("apply").disabled=true;
- msg("お待ちください...");
+ msg("申請を確認しています...");
 
  try{
-  await addDoc(collection(db,"attendance_requests"),{
+  const requestId=id+"_"+today();
+  const ref=doc(db,"attendance_requests",requestId);
+  const existing=await getDoc(ref);
+
+  if(existing.exists()){
+   msg("今日はすでに申請済みです！");
+   return;
+  }
+
+  await setDoc(ref,{
    memberId:id,
    name,
    uid:auth.currentUser.uid,
@@ -239,9 +240,14 @@ $("apply").onclick=async()=>{
    attendanceDate:today(),
    createdAt:serverTimestamp()
   });
-  msg("申請できました！");
+
+  msg("出席申請できました！");
  }catch(e){
-  msg("申請できません："+e.message);
+  if(e.code==="permission-denied"){
+   msg("今日はすでに申請済みか、申請できません。");
+  }else{
+   msg("申請できません："+e.message);
+  }
  }finally{
   $("apply").disabled=false;
  }
@@ -298,7 +304,6 @@ async function loadRequests(){
 
  requestCache=[];
  snap.forEach(d=>requestCache.push({id:d.id,...d.data()}));
-
  area.innerHTML="";
 
  if(!requestCache.length){
@@ -384,7 +389,6 @@ async function renderMembers(){
 
 $("addMember").onclick=async()=>{
  const name=$("newMember").value.trim();
-
  if(!name){
   msg("名前を入力してください");
   return;
@@ -429,7 +433,6 @@ async function loadHolidays(){
 
 $("addHoliday").onclick=async()=>{
  const date=$("holidayDate").value;
-
  if(!date){
   msg("日付を選択してください");
   return;
@@ -486,8 +489,7 @@ $("addTest").onclick=async()=>{
 
  try{
   await addDoc(collection(db,"test_periods"),{
-   start,
-   end,
+   start,end,
    name:$("testName").value.trim()||"テスト期間",
    createdAt:serverTimestamp()
   });
@@ -537,16 +539,12 @@ $("saveRankingStart").onclick=async()=>{
 
 function isExcluded(date){
  if(holidayCache.some(x=>x.date===date))return true;
-
- return testCache.some(x=>
-  date>=x.start&&date<=x.end
- );
+ return testCache.some(x=>date>=x.start&&date<=x.end);
 }
 
 function calculateRanking(){
  const area=$("ranking");
  area.innerHTML="";
-
  const eligible=[];
  const dates=[];
 
@@ -613,7 +611,6 @@ async function refreshAll(){
    loadTests(),
    loadRankingStart()
   ]);
-
   calculateRanking();
  }catch(e){
   msg("データ取得エラー："+e.message);
