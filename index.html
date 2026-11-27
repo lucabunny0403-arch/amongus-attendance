@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -51,6 +50,7 @@ button:disabled{opacity:.5}
 </head>
 <body>
 <div class="container">
+
 <header>
 <h1>🚀 AMONG US</h1>
 <p>CREW ATTENDANCE SYSTEM</p>
@@ -74,6 +74,7 @@ button:disabled{opacity:.5}
 </div>
 
 <div id="adminPanel" class="hidden">
+
 <div class="panel">
 <h2>📋 出席申請管理</h2>
 <button id="refresh" class="secondary">申請一覧を更新</button>
@@ -91,6 +92,13 @@ button:disabled{opacity:.5}
 <h2>🏆 出席率ランキング</h2>
 <p class="small">休日・テスト期間を除いた日数で計算</p>
 <div id="ranking">集計中...</div>
+</div>
+
+<div class="panel">
+<h2>⚙️ 集計開始日の設定</h2>
+<p class="small">この日から出席率の集計を開始します。</p>
+<input type="date" id="rankingStart">
+<button id="saveRankingStart">集計開始日を保存</button>
 </div>
 
 <div class="panel">
@@ -112,6 +120,7 @@ button:disabled{opacity:.5}
 <button id="addTest">テスト期間を登録</button>
 <div id="tests"></div>
 </div>
+
 </div>
 
 <p id="message"></p>
@@ -128,7 +137,7 @@ import {
 
 import {
  getFirestore,collection,getDocs,addDoc,serverTimestamp,
- doc,updateDoc,deleteDoc,query,orderBy
+ doc,updateDoc,deleteDoc,query,orderBy,getDoc,setDoc
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const firebaseConfig={
@@ -142,27 +151,31 @@ const firebaseConfig={
 };
 
 const ADMIN_UID="nPCMPMkbHyetAGOd0SS9GZKRZRo2";
+const DEFAULT_START_DATE="2026-11-27";
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
 const db=getFirestore(app);
 
 const $=id=>document.getElementById(id);
+
 let admin=false;
 let memberCache=[];
 let requestCache=[];
 let holidayCache=[];
 let testCache=[];
+let rankingStartDate=DEFAULT_START_DATE;
 
 function msg(t){$("message").textContent=t}
+
 function today(){
  const d=new Date();
  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
+
 function dateText(timestamp){
  if(!timestamp)return "日付不明";
- const d=timestamp.toDate();
- return d.toLocaleDateString("ja-JP");
+ return timestamp.toDate().toLocaleDateString("ja-JP");
 }
 
 async function loadMembers(){
@@ -170,40 +183,68 @@ async function loadMembers(){
  memberCache=[];
  const select=$("member");
  select.innerHTML='<option value="">メンバーを選択</option>';
+
  snap.forEach(d=>{
   const x={id:d.id,...d.data()};
   memberCache.push(x);
   const o=document.createElement("option");
-  o.value=d.id;o.textContent=x.name;
+  o.value=d.id;
+  o.textContent=x.name;
   select.appendChild(o);
  });
+
  if(admin)renderMembers();
+}
+
+async function loadRankingStart(){
+ const ref=doc(db,"settings","attendance");
+ const snap=await getDoc(ref);
+
+ rankingStartDate=snap.exists()
+  ? snap.data().startDate||DEFAULT_START_DATE
+  : DEFAULT_START_DATE;
+
+ $("rankingStart").value=rankingStartDate;
 }
 
 async function start(){
  try{
-  if(!auth.currentUser)await signInAnonymously(auth);
+  if(!auth.currentUser){
+   await signInAnonymously(auth);
+  }
   await loadMembers();
- }catch(e){msg("接続エラー："+e.message)}
+ }catch(e){
+  msg("接続エラー："+e.message);
+ }
 }
 
 $("apply").onclick=async()=>{
  const id=$("member").value;
  const name=$("member").selectedOptions[0]?.textContent;
- if(!id){msg("メンバーを選択してください");return}
+
+ if(!id){
+  msg("メンバーを選択してください");
+  return;
+ }
+
  $("apply").disabled=true;
  msg("お待ちください...");
+
  try{
   await addDoc(collection(db,"attendance_requests"),{
-   memberId:id,name,
+   memberId:id,
+   name,
    uid:auth.currentUser.uid,
    status:"pending",
    attendanceDate:today(),
    createdAt:serverTimestamp()
   });
   msg("申請できました！");
- }catch(e){msg("申請できません："+e.message)}
- finally{$("apply").disabled=false}
+ }catch(e){
+  msg("申請できません："+e.message);
+ }finally{
+  $("apply").disabled=false;
+ }
 };
 
 $("login").onclick=async()=>{
@@ -211,16 +252,20 @@ $("login").onclick=async()=>{
   const result=await signInWithEmailAndPassword(
    auth,$("email").value,$("password").value
   );
+
   if(result.user.uid!==ADMIN_UID){
    await signOut(auth);
    msg("管理者アカウントではありません");
    return;
   }
+
   admin=true;
   showAdmin();
   await refreshAll();
   msg("管理者ログイン成功！");
- }catch(e){msg("ログイン失敗："+e.message)}
+ }catch(e){
+  msg("ログイン失敗："+e.message);
+ }
 };
 
 function showAdmin(){
@@ -229,7 +274,8 @@ function showAdmin(){
  $("login").classList.toggle("hidden",admin);
  $("email").classList.toggle("hidden",admin);
  $("password").classList.toggle("hidden",admin);
- $("adminStatus").textContent=admin?"管理者ログイン中":"ログインしていません";
+ $("adminStatus").textContent=
+  admin?"管理者ログイン中":"ログインしていません";
 }
 
 $("logout").onclick=async()=>{
@@ -237,7 +283,6 @@ $("logout").onclick=async()=>{
  admin=false;
  showAdmin();
  msg("ログアウトしました");
- await start();
 };
 
 $("refresh").onclick=refreshAll;
@@ -245,35 +290,52 @@ $("refresh").onclick=refreshAll;
 async function loadRequests(){
  const area=$("requests");
  area.textContent="読み込み中...";
+
  const snap=await getDocs(query(
   collection(db,"attendance_requests"),
   orderBy("createdAt","desc")
  ));
+
  requestCache=[];
  snap.forEach(d=>requestCache.push({id:d.id,...d.data()}));
+
  area.innerHTML="";
- if(!requestCache.length){area.textContent="申請はありません";return}
+
+ if(!requestCache.length){
+  area.textContent="申請はありません";
+  return;
+ }
+
  requestCache.forEach(x=>{
   const item=document.createElement("div");
   item.className="item";
+
   const title=document.createElement("strong");
   title.textContent=x.name||"名前不明";
+
   const info=document.createElement("p");
   info.textContent="状態："+(x.status||"不明")+
    " / 日付："+(x.attendanceDate||dateText(x.createdAt));
+
   item.append(title,info);
+
   if(x.status==="pending"){
    const actions=document.createElement("div");
    actions.className="actions";
+
    const a=document.createElement("button");
    a.textContent="承認";
    a.onclick=()=>changeStatus(x.id,"approved");
+
    const r=document.createElement("button");
    r.textContent="却下";
    r.className="secondary";
    r.onclick=()=>changeStatus(x.id,"rejected");
-   actions.append(a,r);item.append(actions);
+
+   actions.append(a,r);
+   item.append(actions);
   }
+
   area.append(item);
  });
 }
@@ -283,105 +345,159 @@ async function changeStatus(id,status){
   await updateDoc(doc(db,"attendance_requests",id),{status});
   msg(status==="approved"?"承認しました":"却下しました");
   await refreshAll();
- }catch(e){msg("更新できません："+e.message)}
+ }catch(e){
+  msg("更新できません："+e.message);
+ }
 }
 
 async function renderMembers(){
  const area=$("membersAdmin");
  area.innerHTML="";
+
  memberCache.forEach(x=>{
   const item=document.createElement("div");
   item.className="item";
+
   const name=document.createElement("span");
   name.textContent=x.name;
+
   const del=document.createElement("button");
   del.className="danger";
   del.textContent="削除";
+
   del.onclick=async()=>{
    if(!confirm(x.name+"を削除しますか？"))return;
+
    try{
     await deleteDoc(doc(db,"members",x.id));
     msg("メンバーを削除しました");
     await refreshAll();
-   }catch(e){msg("削除できません："+e.message)}
+   }catch(e){
+    msg("削除できません："+e.message);
+   }
   };
-  item.append(name,del);area.append(item);
+
+  item.append(name,del);
+  area.append(item);
  });
 }
 
 $("addMember").onclick=async()=>{
  const name=$("newMember").value.trim();
- if(!name){msg("名前を入力してください");return}
+
+ if(!name){
+  msg("名前を入力してください");
+  return;
+ }
+
  try{
   await addDoc(collection(db,"members"),{name});
   $("newMember").value="";
   msg("メンバーを追加しました");
   await refreshAll();
- }catch(e){msg("追加できません："+e.message)}
+ }catch(e){
+  msg("追加できません："+e.message);
+ }
 };
 
 async function loadHolidays(){
  const snap=await getDocs(collection(db,"holidays"));
  holidayCache=[];
  snap.forEach(d=>holidayCache.push({id:d.id,...d.data()}));
- const area=$("holidays");area.innerHTML="";
+
+ const area=$("holidays");
+ area.innerHTML="";
+
  holidayCache.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+
  holidayCache.forEach(x=>{
-  const item=document.createElement("div");item.className="item";
+  const item=document.createElement("div");
+  item.className="item";
+
   const text=document.createElement("span");
   text.textContent=(x.date||"日付不明")+" "+(x.name||"休日");
+
   const del=document.createElement("button");
-  del.className="danger";del.textContent="削除";
+  del.className="danger";
+  del.textContent="削除";
   del.onclick=()=>removeRecord("holidays",x.id);
-  item.append(text,del);area.append(item);
+
+  item.append(text,del);
+  area.append(item);
  });
 }
 
 $("addHoliday").onclick=async()=>{
  const date=$("holidayDate").value;
- if(!date){msg("日付を選択してください");return}
+
+ if(!date){
+  msg("日付を選択してください");
+  return;
+ }
+
  try{
   await addDoc(collection(db,"holidays"),{
-   date,name:$("holidayName").value.trim()||"休日",
+   date,
+   name:$("holidayName").value.trim()||"休日",
    createdAt:serverTimestamp()
   });
+
   $("holidayName").value="";
   msg("休日を登録しました");
   await refreshAll();
- }catch(e){msg("休日を登録できません："+e.message)}
+ }catch(e){
+  msg("休日を登録できません："+e.message);
+ }
 };
 
 async function loadTests(){
  const snap=await getDocs(collection(db,"test_periods"));
  testCache=[];
  snap.forEach(d=>testCache.push({id:d.id,...d.data()}));
- const area=$("tests");area.innerHTML="";
+
+ const area=$("tests");
+ area.innerHTML="";
+
  testCache.forEach(x=>{
-  const item=document.createElement("div");item.className="item";
+  const item=document.createElement("div");
+  item.className="item";
+
   const text=document.createElement("span");
   text.textContent=(x.name||"テスト期間")+"："+x.start+" ～ "+x.end;
+
   const del=document.createElement("button");
-  del.className="danger";del.textContent="削除";
+  del.className="danger";
+  del.textContent="削除";
   del.onclick=()=>removeRecord("test_periods",x.id);
-  item.append(text,del);area.append(item);
+
+  item.append(text,del);
+  area.append(item);
  });
 }
 
 $("addTest").onclick=async()=>{
  const start=$("testStart").value;
  const end=$("testEnd").value;
+
  if(!start||!end||start>end){
-  msg("開始日と終了日を正しく選んでください");return;
+  msg("開始日と終了日を正しく選んでください");
+  return;
  }
+
  try{
   await addDoc(collection(db,"test_periods"),{
-   start,end,name:$("testName").value.trim()||"テスト期間",
+   start,
+   end,
+   name:$("testName").value.trim()||"テスト期間",
    createdAt:serverTimestamp()
   });
+
   $("testName").value="";
   msg("テスト期間を登録しました");
   await refreshAll();
- }catch(e){msg("テスト期間を登録できません："+e.message)}
+ }catch(e){
+  msg("テスト期間を登録できません："+e.message);
+ }
 };
 
 async function removeRecord(col,id){
@@ -389,26 +505,67 @@ async function removeRecord(col,id){
   await deleteDoc(doc(db,col,id));
   msg("削除しました");
   await refreshAll();
- }catch(e){msg("削除できません："+e.message)}
+ }catch(e){
+  msg("削除できません："+e.message);
+ }
 }
+
+$("saveRankingStart").onclick=async()=>{
+ const date=$("rankingStart").value;
+
+ if(!date){
+  msg("集計開始日を選択してください");
+  return;
+ }
+
+ if(date>today()){
+  msg("未来の日付は設定できません");
+  return;
+ }
+
+ try{
+  await setDoc(doc(db,"settings","attendance"),{
+   startDate:date
+  });
+  rankingStartDate=date;
+  calculateRanking();
+  msg("集計開始日を保存しました！");
+ }catch(e){
+  msg("保存できません："+e.message);
+ }
+};
 
 function isExcluded(date){
  if(holidayCache.some(x=>x.date===date))return true;
- return testCache.some(x=>date>=x.start&&date<=x.end);
+
+ return testCache.some(x=>
+  date>=x.start&&date<=x.end
+ );
 }
 
 function calculateRanking(){
- const area=$("ranking");area.innerHTML="";
- const start=memberCache.length? "": "";
+ const area=$("ranking");
+ area.innerHTML="";
+
  const eligible=[];
- const firstDate=""; 
  const dates=[];
- const begin=new Date("2026-11-27T00:00:00");
- const end=new Date(today()+"T00:00:00");
+
+ const begin=new Date(rankingStartDate+"T12:00:00");
+ const end=new Date(today()+"T12:00:00");
+
+ if(begin>end){
+  area.textContent="集計開始日を確認してください";
+  return;
+ }
+
  for(let d=new Date(begin);d<=end;d.setDate(d.getDate()+1)){
-  const key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  const key=d.getFullYear()+"-"+
+   String(d.getMonth()+1).padStart(2,"0")+"-"+
+   String(d.getDate()).padStart(2,"0");
+
   if(!isExcluded(key))dates.push(key);
  }
+
  memberCache.forEach(m=>{
   const approved=new Set(
    requestCache
@@ -416,41 +573,61 @@ function calculateRanking(){
     .map(r=>r.attendanceDate||"")
     .filter(Boolean)
   );
+
   const count=[...approved].filter(d=>dates.includes(d)).length;
   const rate=dates.length?count/dates.length*100:0;
+
   eligible.push({name:m.name,count,rate});
  });
+
  eligible.sort((a,b)=>b.rate-a.rate||b.count-a.count);
+
  const summary=document.createElement("div");
  summary.className="stat";
  summary.textContent="集計対象日数："+dates.length+"日";
  area.append(summary);
+
  eligible.forEach((x,i)=>{
-  const item=document.createElement("div");item.className="item";
+  const item=document.createElement("div");
+  item.className="item";
+
   const title=document.createElement("strong");
   title.textContent=(i+1)+"位 "+x.name;
+
   const detail=document.createElement("p");
   detail.textContent=x.count+"日出席 / 出席率 "+x.rate.toFixed(1)+"%";
-  item.append(title,detail);area.append(item);
+
+  item.append(title,detail);
+  area.append(item);
  });
 }
 
 async function refreshAll(){
  if(!admin)return;
+
  try{
   await Promise.all([
-   loadMembers(),loadRequests(),loadHolidays(),loadTests()
+   loadMembers(),
+   loadRequests(),
+   loadHolidays(),
+   loadTests(),
+   loadRankingStart()
   ]);
+
   calculateRanking();
- }catch(e){msg("データ取得エラー："+e.message)}
+ }catch(e){
+  msg("データ取得エラー："+e.message);
+ }
 }
 
 onAuthStateChanged(auth,user=>{
  if(user&&user.uid===ADMIN_UID){
-  admin=true;showAdmin();
+  admin=true;
+  showAdmin();
   refreshAll().catch(e=>msg(e.message));
  }else if(admin){
-  admin=false;showAdmin();
+  admin=false;
+  showAdmin();
  }
 });
 
