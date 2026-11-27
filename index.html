@@ -4,235 +4,250 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AMONG US CREW ATTENDANCE</title>
+<title>Among Us Crew Attendance</title>
 <style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: Arial, sans-serif;
-  color: white;
-  background:
-    radial-gradient(circle at 20% 20%, #263b67 0, transparent 35%),
-    linear-gradient(145deg, #050914, #101c35 65%, #080d1a);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
+*{box-sizing:border-box}
+body{
+ margin:0;padding:20px;
+ background:radial-gradient(circle at top,#263b63,#080d1c 65%);
+ color:white;font-family:Arial,sans-serif;
+ min-height:100vh
 }
-.panel {
-  width: 100%;
-  max-width: 430px;
-  background: rgba(10, 20, 42, .94);
-  border: 1px solid #48638e;
-  border-radius: 20px;
-  padding: 26px 22px;
-  box-shadow: 0 0 35px #142c55;
+.container{max-width:520px;margin:auto}
+h1{text-align:center;color:#ff4655;font-size:25px}
+.subtitle{text-align:center;color:#b9c8e8}
+.panel{
+ background:#17233b;border:1px solid #405477;
+ border-radius:15px;padding:18px;margin:18px 0;
+ box-shadow:0 8px 25px #0008
 }
-h1 {
-  text-align: center;
-  color: #ff4b58;
-  font-size: 25px;
-  margin: 0 0 8px;
+h2{font-size:19px;color:#ff5967}
+input,select,button{
+ width:100%;padding:13px;margin:7px 0;
+ border-radius:9px;border:1px solid #657b9f;
+ font-size:16px
 }
-.subtitle {
-  text-align: center;
-  color: #9fb6d9;
-  font-size: 12px;
-  letter-spacing: 3px;
-  margin-bottom: 28px;
+button{background:#e94352;color:white;border:0;font-weight:bold}
+button.secondary{background:#405477}
+button:disabled{opacity:.5}
+.item{
+ background:#263958;padding:12px;border-radius:9px;
+ margin:9px 0;overflow-wrap:anywhere
 }
-.crewmate {
-  width: 65px;
-  height: 85px;
-  background: #e94350;
-  border-radius: 28px 28px 20px 20px;
-  margin: 0 auto 20px;
-  position: relative;
-  box-shadow: inset -10px -5px #b72d43;
-}
-.crewmate:after {
-  content: "";
-  position: absolute;
-  width: 43px;
-  height: 24px;
-  background: #a8e5f5;
-  border: 5px solid #d7f5ff;
-  border-radius: 18px;
-  top: 17px;
-  right: -20px;
-}
-label {
-  display: block;
-  margin: 15px 0 8px;
-  color: #b8cbea;
-  font-size: 14px;
-}
-select, button {
-  width: 100%;
-  padding: 15px;
-  border-radius: 10px;
-  font-size: 16px;
-}
-select {
-  background: #142746;
-  color: white;
-  border: 1px solid #54739f;
-}
-button {
-  margin-top: 20px;
-  border: 0;
-  background: #e94350;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-}
-button:disabled { opacity: .5; }
-button:active { transform: scale(.98); }
-#message {
-  text-align: center;
-  margin-top: 18px;
-  line-height: 1.6;
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.footer {
-  text-align: center;
-  color: #7189ac;
-  font-size: 11px;
-  margin-top: 25px;
-}
+.actions{display:flex;gap:8px}
+.actions button{flex:1}
+#message{color:#ffd66b;text-align:center;min-height:24px}
+.hidden{display:none}
 </style>
 </head>
 <body>
-<main class="panel">
-  <div class="crewmate"></div>
-  <h1>CREW CHECK-IN</h1>
-  <div class="subtitle">AMONG US ATTENDANCE SYSTEM</div>
+<div class="container">
+<h1>🚀 CREW ATTENDANCE</h1>
+<p class="subtitle">AMONG US CREW CHECK-IN SYSTEM</p>
 
-  <label for="member">クルーメイトを選択</label>
-  <select id="member">
-    <option value="">メンバーを選んでください</option>
-  </select>
+<div class="panel">
+<h2>🧑‍🚀 出席申請</h2>
+<select id="member">
+<option value="">メンバーを読み込み中...</option>
+</select>
+<button id="apply">出席を申請する</button>
+</div>
 
-  <button id="send">出席を申請する</button>
-  <div id="message">宇宙船への乗船を確認します。</div>
-  <div class="footer">MIRA HQ  •  CREW MANAGEMENT</div>
-</main>
+<div class="panel">
+<h2>🔐 管理者ログイン</h2>
+<input id="email" type="email" placeholder="管理者メールアドレス">
+<input id="password" type="password" placeholder="パスワード">
+<button id="login">ログイン</button>
+<button id="logout" class="secondary hidden">ログアウト</button>
+<p id="adminStatus">ログインしていません</p>
+</div>
+
+<div id="adminPanel" class="panel hidden">
+<h2>📋 出席申請一覧</h2>
+<button id="refresh" class="secondary">一覧を更新</button>
+<div id="requests">読み込み待ち</div>
+</div>
+
+<p id="message"></p>
+</div>
 
 <script type="module">
-import { initializeApp }
-  from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-
+import {initializeApp} from
+"https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
 import {
-  getAuth,
-  signInAnonymously
+ getAuth,signInAnonymously,signInWithEmailAndPassword,
+ signOut,onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-
 import {
-  getFirestore,
-  collection,
-  getDocs,
-  addDoc,
-  query,
-  where,
-  serverTimestamp
+ getFirestore,collection,getDocs,addDoc,serverTimestamp,
+ doc,updateDoc,query,orderBy
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDNzOhy5a5Q9xvX_khXCrQIgkgFBn9TyvE",
-  authDomain: "amongus-crew-attendance.firebaseapp.com",
-  projectId: "amongus-crew-attendance",
-  storageBucket: "amongus-crew-attendance.firebasestorage.app",
-  messagingSenderId: "560094086894",
-  appId: "1:560094086894:web:683d51d9b3648054d5d5ff"
+const firebaseConfig={
+ apiKey:"AIzaSyDNzOhy5a5Q9xvX_khXCrQIgkgFBn9TyvE",
+ authDomain:"amongus-crew-attendance.firebaseapp.com",
+ projectId:"amongus-crew-attendance",
+ storageBucket:"amongus-crew-attendance.firebasestorage.app",
+ messagingSenderId:"560094086894",
+ appId:"1:560094086894:web:683d51d9b3648054d5d5ff",
+ measurementId:"G-W3HF87PBPX"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const ADMIN_UID="nPCMPMkbHyetAGOd0SS9GZKRZRo2";
 
-const memberSelect = document.getElementById("member");
-const sendButton = document.getElementById("send");
-const message = document.getElementById("message");
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getFirestore(app);
 
-let currentUser = null;
+const $=id=>document.getElementById(id);
+let admin=false;
 
-async function start() {
-  try {
-    const result = await signInAnonymously(auth);
-    currentUser = result.user;
+function message(text){$("message").textContent=text;}
 
-    const snapshot = await getDocs(collection(db, "members"));
-
-    memberSelect.innerHTML =
-      '<option value="">メンバーを選んでください</option>';
-
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      if (!data.name) return;
-
-      const option = document.createElement("option");
-      option.value = doc.id;
-      option.textContent = data.name;
-      memberSelect.appendChild(option);
-    });
-
-    message.textContent = "クルーメイトを選択してください。";
-  } catch (error) {
-    console.error(error);
-    message.textContent =
-      "接続できませんでした。管理者に確認してください。";
-  }
+async function loadMembers(){
+ const select=$("member");
+ try{
+  const snap=await getDocs(collection(db,"members"));
+  select.innerHTML='<option value="">メンバーを選択</option>';
+  snap.forEach(d=>{
+   const data=d.data();
+   const option=document.createElement("option");
+   option.value=d.id;
+   option.textContent=data.name;
+   select.appendChild(option);
+  });
+ }catch(e){
+  message("メンバー一覧を読み込めません："+e.message);
+ }
 }
 
-sendButton.addEventListener("click", async () => {
-  const memberId = memberSelect.value;
+async function start(){
+ try{
+  await signInAnonymously(auth);
+  await loadMembers();
+ }catch(e){
+  message("接続エラー："+e.message);
+ }
+}
 
-  if (!currentUser) {
-    message.textContent = "接続中です。少し待ってください。";
-    return;
+$("apply").onclick=async()=>{
+ const id=$("member").value;
+ const name=$("member").selectedOptions[0]?.textContent;
+ if(!id){message("メンバーを選択してください");return;}
+ $("apply").disabled=true;
+ message("お待ちください...");
+ try{
+  await addDoc(collection(db,"attendance_requests"),{
+   memberId:id,name:name,uid:auth.currentUser.uid,
+   status:"pending",createdAt:serverTimestamp()
+  });
+  message("申請できました！");
+ }catch(e){
+  message("申請できませんでした："+e.message);
+ }finally{
+  $("apply").disabled=false;
+ }
+};
+
+$("login").onclick=async()=>{
+ try{
+  const result=await signInWithEmailAndPassword(
+   auth,$("email").value,$("password").value
+  );
+  if(result.user.uid!==ADMIN_UID){
+   await signOut(auth);
+   message("管理者アカウントではありません");
+   return;
   }
+  admin=true;
+  showAdmin();
+  await loadRequests();
+  message("管理者ログイン成功！");
+ }catch(e){
+  message("ログインできません："+e.message);
+ }
+};
 
-  if (!memberId) {
-    message.textContent = "メンバーを選択してください。";
-    return;
+function showAdmin(){
+ $("adminPanel").classList.toggle("hidden",!admin);
+ $("logout").classList.toggle("hidden",!admin);
+ $("login").classList.toggle("hidden",admin);
+ $("email").classList.toggle("hidden",admin);
+ $("password").classList.toggle("hidden",admin);
+ $("adminStatus").textContent=admin?"管理者ログイン中":"ログインしていません";
+}
+
+$("logout").onclick=async()=>{
+ await signOut(auth);
+ admin=false;
+ showAdmin();
+ message("ログアウトしました");
+ await start();
+};
+
+$("refresh").onclick=loadRequests;
+
+async function loadRequests(){
+ if(!admin)return;
+ const area=$("requests");
+ area.textContent="読み込み中...";
+ try{
+  const snap=await getDocs(query(
+   collection(db,"attendance_requests"),
+   orderBy("createdAt","desc")
+  ));
+  area.innerHTML="";
+  if(snap.empty){
+   area.textContent="申請はありません";
+   return;
   }
+  snap.forEach(d=>{
+   const data=d.data();
+   const item=document.createElement("div");
+   item.className="item";
+   const title=document.createElement("strong");
+   title.textContent=data.name||"名前不明";
+   const status=document.createElement("p");
+   status.textContent="状態："+(data.status||"未設定");
+   item.append(title,status);
+   if(data.status==="pending"){
+    const actions=document.createElement("div");
+    actions.className="actions";
+    const approve=document.createElement("button");
+    approve.textContent="承認";
+    approve.onclick=()=>changeStatus(d.id,"approved");
+    const reject=document.createElement("button");
+    reject.textContent="却下";
+    reject.className="secondary";
+    reject.onclick=()=>changeStatus(d.id,"rejected");
+    actions.append(approve,reject);
+    item.append(actions);
+   }
+   area.append(item);
+  });
+ }catch(e){
+  area.textContent="一覧を取得できません："+e.message;
+ }
+}
 
-  sendButton.disabled = true;
-  message.textContent = "申請を送信しています...";
+async function changeStatus(id,status){
+ try{
+  await updateDoc(doc(db,"attendance_requests",id),{status});
+  message(status==="approved"?"承認しました":"却下しました");
+  await loadRequests();
+ }catch(e){
+  message("更新できません："+e.message);
+ }
+}
 
-  try {
-    const memberDoc = await getDocs(
-      query(
-        collection(db, "members"),
-        where("__name__", "==", memberId)
-      )
-    );
-
-    if (memberDoc.empty) {
-      throw new Error("Member not found");
-    }
-
-    const memberName = memberDoc.docs[0].data().name;
-
-    await addDoc(collection(db, "attendance_requests"), {
-      memberId: memberId,
-      name: memberName,
-      uid: currentUser.uid,
-      status: "pending",
-      createdAt: serverTimestamp()
-    });
-
-    message.textContent =
-      "申請を受け付けました！管理者の確認をお待ちください。";
-  } catch (error) {
-    console.error(error);
-    message.textContent =
-      "申請できませんでした。Firestoreのルール設定を確認してください。";
-  } finally {
-    sendButton.disabled = false;
-  }
+onAuthStateChanged(auth,user=>{
+ if(user && user.uid===ADMIN_UID){
+  admin=true;
+  showAdmin();
+ }else if(admin){
+  admin=false;
+  showAdmin();
+ }
 });
 
 start();
