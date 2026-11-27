@@ -42,10 +42,62 @@ button:disabled{opacity:.4}
 .small{font-size:12px;color:#a9badc}
 .tabs{display:flex;gap:7px;flex-wrap:wrap}
 .tabs button{flex:1;min-width:100px}
-.rank{display:flex;justify-content:space-between;gap:10px;align-items:center}
-.rank strong{color:#ffd66b}
 .notice{color:#ffd66b;font-size:13px}
 hr{border:0;border-top:1px solid #405477;margin:18px 0}
+
+/* ランキング */
+.rank-search{
+ margin:13px 0;
+}
+.rank-summary{
+ display:flex;justify-content:space-between;align-items:center;
+ background:#101b30;border-radius:10px;padding:12px;
+ margin:12px 0;font-size:13px;color:#b9c9e5;
+}
+.rank-card{
+ background:#263958;border:1px solid #405477;
+ border-radius:11px;padding:12px;margin:8px 0;
+}
+.rank-card.top1{border:2px solid #ffd66b;background:#403b2b}
+.rank-card.top2{border:2px solid #b9c8d8}
+.rank-card.top3{border:2px solid #bd8b62}
+.rank-top{
+ display:flex;align-items:center;gap:10px;
+}
+.rank-number{
+ min-width:43px;height:43px;border-radius:10px;
+ display:flex;align-items:center;justify-content:center;
+ background:#17243c;color:#ffd66b;font-size:18px;font-weight:bold;
+}
+.top1 .rank-number{background:#ffd66b;color:#382b0a}
+.top2 .rank-number{background:#b9c8d8;color:#17243c}
+.top3 .rank-number{background:#bd8b62;color:#17243c}
+.rank-name{
+ flex:1;min-width:0;font-size:15px;font-weight:bold;
+ overflow-wrap:anywhere;
+}
+.rank-rate{
+ font-size:21px;font-weight:bold;color:#ffd66b;
+ white-space:nowrap;
+}
+.rank-detail{
+ display:flex;justify-content:space-between;
+ color:#b9c9e5;font-size:12px;margin-top:9px;
+}
+.rank-bar{
+ height:9px;background:#101b30;border-radius:20px;
+ overflow:hidden;margin-top:8px;
+}
+.rank-fill{
+ height:100%;background:linear-gradient(90deg,#e94352,#ffd66b);
+ border-radius:20px;transition:width .3s;
+}
+.rank-empty{
+ text-align:center;padding:20px;color:#a9badc;
+}
+.rank-count{
+ color:#ffd66b;font-weight:bold;
+}
 </style>
 </head>
 <body>
@@ -191,6 +243,7 @@ let adminCache=[];
 let rankingStartDate=DEFAULT_START_DATE;
 let publicMode="ranking";
 let authCheckRunning=false;
+let rankingSearch="";
 
 function msg(t){$("message").textContent=t}
 
@@ -387,53 +440,135 @@ function getEligibleDates(){
  return dates;
 }
 
+/* 見やすいランキング */
+function renderRanking(area){
+ const dates=getEligibleDates();
+
+ const ranking=memberCache.map(m=>{
+  const attended=new Set(
+   publicCache
+    .filter(r=>r.memberId===m.id&&r.status==="approved")
+    .map(r=>r.attendanceDate)
+    .filter(d=>d&&dates.includes(d))
+  );
+
+  return {
+   id:m.id,
+   name:m.name||"名前未設定",
+   count:attended.size,
+   rate:dates.length?attended.size/dates.length*100:0
+  };
+ });
+
+ ranking.sort((a,b)=>b.rate-a.rate||b.count-a.count||a.name.localeCompare(b.name,"ja"));
+
+ const search=document.createElement("input");
+ search.type="search";
+ search.className="rank-search";
+ search.placeholder="🔍 名前でメンバーを検索";
+ search.value=rankingSearch;
+ search.addEventListener("input",()=>{
+  rankingSearch=search.value;
+  renderPublicData();
+  const newSearch=$("rankingSearch");
+  if(newSearch){
+   newSearch.focus();
+   newSearch.setSelectionRange(newSearch.value.length,newSearch.value.length);
+  }
+ });
+ search.id="rankingSearch";
+ area.append(search);
+
+ const filtered=ranking.filter(x=>
+  x.name.toLowerCase().includes(rankingSearch.trim().toLowerCase())
+ );
+
+ const summary=document.createElement("div");
+ summary.className="rank-summary";
+
+ const left=document.createElement("span");
+ left.textContent="集計対象日数："+dates.length+"日";
+
+ const right=document.createElement("span");
+ right.innerHTML='<span class="rank-count">'+filtered.length+'</span> 人表示';
+
+ summary.append(left,right);
+ area.append(summary);
+
+ if(!ranking.length){
+  const empty=document.createElement("div");
+  empty.className="rank-empty";
+  empty.textContent="メンバーがまだ登録されていません";
+  area.append(empty);
+  return;
+ }
+
+ if(!filtered.length){
+  const empty=document.createElement("div");
+  empty.className="rank-empty";
+  empty.textContent="該当するメンバーはいません";
+  area.append(empty);
+  return;
+ }
+
+ filtered.forEach(x=>{
+  const i=ranking.indexOf(x);
+  const rank=i+1;
+
+  const card=document.createElement("div");
+  card.className="rank-card";
+  if(rank===1)card.classList.add("top1");
+  if(rank===2)card.classList.add("top2");
+  if(rank===3)card.classList.add("top3");
+
+  const top=document.createElement("div");
+  top.className="rank-top";
+
+  const number=document.createElement("div");
+  number.className="rank-number";
+  number.textContent=rank===1?"🥇":rank===2?"🥈":rank===3?"🥉":rank+"位";
+
+  const name=document.createElement("div");
+  name.className="rank-name";
+  name.textContent=x.name;
+
+  const rate=document.createElement("div");
+  rate.className="rank-rate";
+  rate.textContent=x.rate.toFixed(1)+"%";
+
+  top.append(number,name,rate);
+
+  const detail=document.createElement("div");
+  detail.className="rank-detail";
+
+  const count=document.createElement("span");
+  count.textContent="出席 "+x.count+"日";
+
+  const total=document.createElement("span");
+  total.textContent="対象 "+dates.length+"日";
+
+  detail.append(count,total);
+
+  const bar=document.createElement("div");
+  bar.className="rank-bar";
+
+  const fill=document.createElement("div");
+  fill.className="rank-fill";
+  fill.style.width=Math.min(100,x.rate)+"%";
+
+  bar.append(fill);
+  card.append(top,detail,bar);
+  area.append(card);
+ });
+}
+
 function renderPublicData(){
  const area=$("publicData");
  if(!area)return;
  area.innerHTML="";
 
  if(publicMode==="ranking"){
-  const dates=getEligibleDates();
-
-  const ranking=memberCache.map(m=>{
-   const attended=new Set(
-    publicCache
-     .filter(r=>r.memberId===m.id&&r.status==="approved")
-     .map(r=>r.attendanceDate)
-     .filter(d=>d&&dates.includes(d))
-   );
-
-   return {
-    name:m.name||"名前未設定",
-    count:attended.size,
-    rate:dates.length?attended.size/dates.length*100:0
-   };
-  });
-
-  ranking.sort((a,b)=>b.rate-a.rate||b.count-a.count);
-
-  const summary=document.createElement("div");
-  summary.className="stat";
-  summary.textContent="集計対象日数："+dates.length+"日";
-  area.append(summary);
-
-  if(!ranking.length){
-   area.append("メンバーがまだ登録されていません");
-  }
-
-  ranking.forEach((x,i)=>{
-   const item=document.createElement("div");
-   item.className="item rank";
-
-   const name=document.createElement("strong");
-   name.textContent=(i+1)+"位 "+x.name;
-
-   const score=document.createElement("span");
-   score.textContent=x.count+"日 / "+x.rate.toFixed(1)+"%";
-
-   item.append(name,score);
-   area.append(item);
-  });
+  renderRanking(area);
  }else{
   const records=[...publicCache]
    .filter(r=>r.status==="approved"&&r.attendanceDate)
