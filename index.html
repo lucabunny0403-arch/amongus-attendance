@@ -4,49 +4,60 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Among Us Crew Attendance</title>
+<title>AMONG US CREW ATTENDANCE</title>
 <style>
 *{box-sizing:border-box}
 body{
- margin:0;padding:20px;
- background:radial-gradient(circle at top,#263b63,#080d1c 65%);
- color:white;font-family:Arial,sans-serif;
+ margin:0;padding:18px;color:#fff;
+ font-family:Arial,sans-serif;
+ background:radial-gradient(circle at top,#243b62,#080d19 70%);
  min-height:100vh
 }
-.container{max-width:520px;margin:auto}
-h1{text-align:center;color:#ff4655;font-size:25px}
-.subtitle{text-align:center;color:#b9c8e8}
+.container{max-width:600px;margin:auto}
+header{text-align:center;padding:15px}
+h1{color:#ff4655;font-size:25px}
+header p{color:#a9badc}
 .panel{
- background:#17233b;border:1px solid #405477;
- border-radius:15px;padding:18px;margin:18px 0;
- box-shadow:0 8px 25px #0008
+ background:#17243c;border:1px solid #405477;
+ border-radius:15px;padding:17px;margin:15px 0;
+ box-shadow:0 7px 22px #0007
 }
-h2{font-size:19px;color:#ff5967}
+h2{color:#ff6470;font-size:19px}
+h3{color:#c8d8f5}
 input,select,button{
- width:100%;padding:13px;margin:7px 0;
- border-radius:9px;border:1px solid #657b9f;
- font-size:16px
+ width:100%;padding:12px;margin:6px 0;
+ border:1px solid #647a9e;border-radius:8px;
+ font-size:15px
 }
 button{background:#e94352;color:white;border:0;font-weight:bold}
 button.secondary{background:#405477}
+button.danger{background:#7e3441}
 button:disabled{opacity:.5}
+.hidden{display:none!important}
 .item{
- background:#263958;padding:12px;border-radius:9px;
- margin:9px 0;overflow-wrap:anywhere
+ background:#263958;padding:12px;margin:9px 0;
+ border-radius:9px;overflow-wrap:anywhere
 }
 .actions{display:flex;gap:8px}
 .actions button{flex:1}
-#message{color:#ffd66b;text-align:center;min-height:24px}
-.hidden{display:none}
+.stat{
+ display:flex;justify-content:space-between;
+ padding:8px 0;border-bottom:1px solid #405477
+}
+.rank{font-size:20px;color:#ffd66b}
+#message{color:#ffd66b;text-align:center;min-height:25px}
+.small{font-size:12px;color:#a9badc}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>🚀 CREW ATTENDANCE</h1>
-<p class="subtitle">AMONG US CREW CHECK-IN SYSTEM</p>
+<header>
+<h1>🚀 AMONG US</h1>
+<p>CREW ATTENDANCE SYSTEM</p>
+</header>
 
 <div class="panel">
-<h2>🧑‍🚀 出席申請</h2>
+<h2>🧑‍🚀 CREW CHECK-IN</h2>
 <select id="member">
 <option value="">メンバーを読み込み中...</option>
 </select>
@@ -54,7 +65,7 @@ button:disabled{opacity:.5}
 </div>
 
 <div class="panel">
-<h2>🔐 管理者ログイン</h2>
+<h2>🔐 ADMIN LOGIN</h2>
 <input id="email" type="email" placeholder="管理者メールアドレス">
 <input id="password" type="password" placeholder="パスワード">
 <button id="login">ログイン</button>
@@ -62,25 +73,62 @@ button:disabled{opacity:.5}
 <p id="adminStatus">ログインしていません</p>
 </div>
 
-<div id="adminPanel" class="panel hidden">
-<h2>📋 出席申請一覧</h2>
-<button id="refresh" class="secondary">一覧を更新</button>
+<div id="adminPanel" class="hidden">
+<div class="panel">
+<h2>📋 出席申請管理</h2>
+<button id="refresh" class="secondary">申請一覧を更新</button>
 <div id="requests">読み込み待ち</div>
+</div>
+
+<div class="panel">
+<h2>👥 メンバー管理</h2>
+<input id="newMember" placeholder="新しいメンバー名">
+<button id="addMember">メンバーを追加</button>
+<div id="membersAdmin"></div>
+</div>
+
+<div class="panel">
+<h2>🏆 出席率ランキング</h2>
+<p class="small">休日・テスト期間を除いた日数で計算</p>
+<div id="ranking">集計中...</div>
+</div>
+
+<div class="panel">
+<h2>📅 休日管理</h2>
+<label>休日の日付</label>
+<input type="date" id="holidayDate">
+<input id="holidayName" placeholder="休日の名前（任意）">
+<button id="addHoliday">休日を登録</button>
+<div id="holidays"></div>
+</div>
+
+<div class="panel">
+<h2>📝 テスト期間管理</h2>
+<label>開始日</label>
+<input type="date" id="testStart">
+<label>終了日</label>
+<input type="date" id="testEnd">
+<input id="testName" placeholder="テスト期間の名前">
+<button id="addTest">テスト期間を登録</button>
+<div id="tests"></div>
+</div>
 </div>
 
 <p id="message"></p>
 </div>
 
 <script type="module">
-import {initializeApp} from
-"https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+
 import {
  getAuth,signInAnonymously,signInWithEmailAndPassword,
  signOut,onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+
 import {
  getFirestore,collection,getDocs,addDoc,serverTimestamp,
- doc,updateDoc,query,orderBy
+ doc,updateDoc,deleteDoc,query,orderBy
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const firebaseConfig={
@@ -101,52 +149,61 @@ const db=getFirestore(app);
 
 const $=id=>document.getElementById(id);
 let admin=false;
+let memberCache=[];
+let requestCache=[];
+let holidayCache=[];
+let testCache=[];
 
-function message(text){$("message").textContent=text;}
+function msg(t){$("message").textContent=t}
+function today(){
+ const d=new Date();
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function dateText(timestamp){
+ if(!timestamp)return "日付不明";
+ const d=timestamp.toDate();
+ return d.toLocaleDateString("ja-JP");
+}
 
 async function loadMembers(){
+ const snap=await getDocs(collection(db,"members"));
+ memberCache=[];
  const select=$("member");
- try{
-  const snap=await getDocs(collection(db,"members"));
-  select.innerHTML='<option value="">メンバーを選択</option>';
-  snap.forEach(d=>{
-   const data=d.data();
-   const option=document.createElement("option");
-   option.value=d.id;
-   option.textContent=data.name;
-   select.appendChild(option);
-  });
- }catch(e){
-  message("メンバー一覧を読み込めません："+e.message);
- }
+ select.innerHTML='<option value="">メンバーを選択</option>';
+ snap.forEach(d=>{
+  const x={id:d.id,...d.data()};
+  memberCache.push(x);
+  const o=document.createElement("option");
+  o.value=d.id;o.textContent=x.name;
+  select.appendChild(o);
+ });
+ if(admin)renderMembers();
 }
 
 async function start(){
  try{
-  await signInAnonymously(auth);
+  if(!auth.currentUser)await signInAnonymously(auth);
   await loadMembers();
- }catch(e){
-  message("接続エラー："+e.message);
- }
+ }catch(e){msg("接続エラー："+e.message)}
 }
 
 $("apply").onclick=async()=>{
  const id=$("member").value;
  const name=$("member").selectedOptions[0]?.textContent;
- if(!id){message("メンバーを選択してください");return;}
+ if(!id){msg("メンバーを選択してください");return}
  $("apply").disabled=true;
- message("お待ちください...");
+ msg("お待ちください...");
  try{
   await addDoc(collection(db,"attendance_requests"),{
-   memberId:id,name:name,uid:auth.currentUser.uid,
-   status:"pending",createdAt:serverTimestamp()
+   memberId:id,name,
+   uid:auth.currentUser.uid,
+   status:"pending",
+   attendanceDate:today(),
+   createdAt:serverTimestamp()
   });
-  message("申請できました！");
- }catch(e){
-  message("申請できませんでした："+e.message);
- }finally{
-  $("apply").disabled=false;
- }
+  msg("申請できました！");
+ }catch(e){msg("申請できません："+e.message)}
+ finally{$("apply").disabled=false}
 };
 
 $("login").onclick=async()=>{
@@ -156,16 +213,14 @@ $("login").onclick=async()=>{
   );
   if(result.user.uid!==ADMIN_UID){
    await signOut(auth);
-   message("管理者アカウントではありません");
+   msg("管理者アカウントではありません");
    return;
   }
   admin=true;
   showAdmin();
-  await loadRequests();
-  message("管理者ログイン成功！");
- }catch(e){
-  message("ログインできません："+e.message);
- }
+  await refreshAll();
+  msg("管理者ログイン成功！");
+ }catch(e){msg("ログイン失敗："+e.message)}
 };
 
 function showAdmin(){
@@ -181,72 +236,221 @@ $("logout").onclick=async()=>{
  await signOut(auth);
  admin=false;
  showAdmin();
- message("ログアウトしました");
+ msg("ログアウトしました");
  await start();
 };
 
-$("refresh").onclick=loadRequests;
+$("refresh").onclick=refreshAll;
 
 async function loadRequests(){
- if(!admin)return;
  const area=$("requests");
  area.textContent="読み込み中...";
- try{
-  const snap=await getDocs(query(
-   collection(db,"attendance_requests"),
-   orderBy("createdAt","desc")
-  ));
-  area.innerHTML="";
-  if(snap.empty){
-   area.textContent="申請はありません";
-   return;
+ const snap=await getDocs(query(
+  collection(db,"attendance_requests"),
+  orderBy("createdAt","desc")
+ ));
+ requestCache=[];
+ snap.forEach(d=>requestCache.push({id:d.id,...d.data()}));
+ area.innerHTML="";
+ if(!requestCache.length){area.textContent="申請はありません";return}
+ requestCache.forEach(x=>{
+  const item=document.createElement("div");
+  item.className="item";
+  const title=document.createElement("strong");
+  title.textContent=x.name||"名前不明";
+  const info=document.createElement("p");
+  info.textContent="状態："+(x.status||"不明")+
+   " / 日付："+(x.attendanceDate||dateText(x.createdAt));
+  item.append(title,info);
+  if(x.status==="pending"){
+   const actions=document.createElement("div");
+   actions.className="actions";
+   const a=document.createElement("button");
+   a.textContent="承認";
+   a.onclick=()=>changeStatus(x.id,"approved");
+   const r=document.createElement("button");
+   r.textContent="却下";
+   r.className="secondary";
+   r.onclick=()=>changeStatus(x.id,"rejected");
+   actions.append(a,r);item.append(actions);
   }
-  snap.forEach(d=>{
-   const data=d.data();
-   const item=document.createElement("div");
-   item.className="item";
-   const title=document.createElement("strong");
-   title.textContent=data.name||"名前不明";
-   const status=document.createElement("p");
-   status.textContent="状態："+(data.status||"未設定");
-   item.append(title,status);
-   if(data.status==="pending"){
-    const actions=document.createElement("div");
-    actions.className="actions";
-    const approve=document.createElement("button");
-    approve.textContent="承認";
-    approve.onclick=()=>changeStatus(d.id,"approved");
-    const reject=document.createElement("button");
-    reject.textContent="却下";
-    reject.className="secondary";
-    reject.onclick=()=>changeStatus(d.id,"rejected");
-    actions.append(approve,reject);
-    item.append(actions);
-   }
-   area.append(item);
-  });
- }catch(e){
-  area.textContent="一覧を取得できません："+e.message;
- }
+  area.append(item);
+ });
 }
 
 async function changeStatus(id,status){
  try{
   await updateDoc(doc(db,"attendance_requests",id),{status});
-  message(status==="approved"?"承認しました":"却下しました");
-  await loadRequests();
- }catch(e){
-  message("更新できません："+e.message);
+  msg(status==="approved"?"承認しました":"却下しました");
+  await refreshAll();
+ }catch(e){msg("更新できません："+e.message)}
+}
+
+async function renderMembers(){
+ const area=$("membersAdmin");
+ area.innerHTML="";
+ memberCache.forEach(x=>{
+  const item=document.createElement("div");
+  item.className="item";
+  const name=document.createElement("span");
+  name.textContent=x.name;
+  const del=document.createElement("button");
+  del.className="danger";
+  del.textContent="削除";
+  del.onclick=async()=>{
+   if(!confirm(x.name+"を削除しますか？"))return;
+   try{
+    await deleteDoc(doc(db,"members",x.id));
+    msg("メンバーを削除しました");
+    await refreshAll();
+   }catch(e){msg("削除できません："+e.message)}
+  };
+  item.append(name,del);area.append(item);
+ });
+}
+
+$("addMember").onclick=async()=>{
+ const name=$("newMember").value.trim();
+ if(!name){msg("名前を入力してください");return}
+ try{
+  await addDoc(collection(db,"members"),{name});
+  $("newMember").value="";
+  msg("メンバーを追加しました");
+  await refreshAll();
+ }catch(e){msg("追加できません："+e.message)}
+};
+
+async function loadHolidays(){
+ const snap=await getDocs(collection(db,"holidays"));
+ holidayCache=[];
+ snap.forEach(d=>holidayCache.push({id:d.id,...d.data()}));
+ const area=$("holidays");area.innerHTML="";
+ holidayCache.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+ holidayCache.forEach(x=>{
+  const item=document.createElement("div");item.className="item";
+  const text=document.createElement("span");
+  text.textContent=(x.date||"日付不明")+" "+(x.name||"休日");
+  const del=document.createElement("button");
+  del.className="danger";del.textContent="削除";
+  del.onclick=()=>removeRecord("holidays",x.id);
+  item.append(text,del);area.append(item);
+ });
+}
+
+$("addHoliday").onclick=async()=>{
+ const date=$("holidayDate").value;
+ if(!date){msg("日付を選択してください");return}
+ try{
+  await addDoc(collection(db,"holidays"),{
+   date,name:$("holidayName").value.trim()||"休日",
+   createdAt:serverTimestamp()
+  });
+  $("holidayName").value="";
+  msg("休日を登録しました");
+  await refreshAll();
+ }catch(e){msg("休日を登録できません："+e.message)}
+};
+
+async function loadTests(){
+ const snap=await getDocs(collection(db,"test_periods"));
+ testCache=[];
+ snap.forEach(d=>testCache.push({id:d.id,...d.data()}));
+ const area=$("tests");area.innerHTML="";
+ testCache.forEach(x=>{
+  const item=document.createElement("div");item.className="item";
+  const text=document.createElement("span");
+  text.textContent=(x.name||"テスト期間")+"："+x.start+" ～ "+x.end;
+  const del=document.createElement("button");
+  del.className="danger";del.textContent="削除";
+  del.onclick=()=>removeRecord("test_periods",x.id);
+  item.append(text,del);area.append(item);
+ });
+}
+
+$("addTest").onclick=async()=>{
+ const start=$("testStart").value;
+ const end=$("testEnd").value;
+ if(!start||!end||start>end){
+  msg("開始日と終了日を正しく選んでください");return;
  }
+ try{
+  await addDoc(collection(db,"test_periods"),{
+   start,end,name:$("testName").value.trim()||"テスト期間",
+   createdAt:serverTimestamp()
+  });
+  $("testName").value="";
+  msg("テスト期間を登録しました");
+  await refreshAll();
+ }catch(e){msg("テスト期間を登録できません："+e.message)}
+};
+
+async function removeRecord(col,id){
+ try{
+  await deleteDoc(doc(db,col,id));
+  msg("削除しました");
+  await refreshAll();
+ }catch(e){msg("削除できません："+e.message)}
+}
+
+function isExcluded(date){
+ if(holidayCache.some(x=>x.date===date))return true;
+ return testCache.some(x=>date>=x.start&&date<=x.end);
+}
+
+function calculateRanking(){
+ const area=$("ranking");area.innerHTML="";
+ const start=memberCache.length? "": "";
+ const eligible=[];
+ const firstDate=""; 
+ const dates=[];
+ const begin=new Date("2026-11-27T00:00:00");
+ const end=new Date(today()+"T00:00:00");
+ for(let d=new Date(begin);d<=end;d.setDate(d.getDate()+1)){
+  const key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  if(!isExcluded(key))dates.push(key);
+ }
+ memberCache.forEach(m=>{
+  const approved=new Set(
+   requestCache
+    .filter(r=>r.memberId===m.id&&r.status==="approved")
+    .map(r=>r.attendanceDate||"")
+    .filter(Boolean)
+  );
+  const count=[...approved].filter(d=>dates.includes(d)).length;
+  const rate=dates.length?count/dates.length*100:0;
+  eligible.push({name:m.name,count,rate});
+ });
+ eligible.sort((a,b)=>b.rate-a.rate||b.count-a.count);
+ const summary=document.createElement("div");
+ summary.className="stat";
+ summary.textContent="集計対象日数："+dates.length+"日";
+ area.append(summary);
+ eligible.forEach((x,i)=>{
+  const item=document.createElement("div");item.className="item";
+  const title=document.createElement("strong");
+  title.textContent=(i+1)+"位 "+x.name;
+  const detail=document.createElement("p");
+  detail.textContent=x.count+"日出席 / 出席率 "+x.rate.toFixed(1)+"%";
+  item.append(title,detail);area.append(item);
+ });
+}
+
+async function refreshAll(){
+ if(!admin)return;
+ try{
+  await Promise.all([
+   loadMembers(),loadRequests(),loadHolidays(),loadTests()
+  ]);
+  calculateRanking();
+ }catch(e){msg("データ取得エラー："+e.message)}
 }
 
 onAuthStateChanged(auth,user=>{
- if(user && user.uid===ADMIN_UID){
-  admin=true;
-  showAdmin();
+ if(user&&user.uid===ADMIN_UID){
+  admin=true;showAdmin();
+  refreshAll().catch(e=>msg(e.message));
  }else if(admin){
-  admin=false;
-  showAdmin();
+  admin=false;showAdmin();
  }
 });
 
