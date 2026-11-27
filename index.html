@@ -7,20 +7,33 @@
 <title>AMONG US CREW ATTENDANCE</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:16px;color:white;font-family:Arial,sans-serif;background:radial-gradient(circle at top,#243b62,#080d19 70%);min-height:100vh}
+body{
+ margin:0;padding:16px;color:white;font-family:Arial,sans-serif;
+ background:radial-gradient(circle at top,#243b62,#080d19 70%);
+ min-height:100vh
+}
 .container{max-width:650px;margin:auto}
 header{text-align:center;padding:15px}
 h1{color:#ff4655;font-size:25px}
 header p{color:#a9badc}
-.panel{background:#17243c;border:1px solid #405477;border-radius:15px;padding:17px;margin:15px 0;box-shadow:0 7px 22px #0007}
+.panel{
+ background:#17243c;border:1px solid #405477;border-radius:15px;
+ padding:17px;margin:15px 0;box-shadow:0 7px 22px #0007
+}
 h2{color:#ff6470;font-size:19px}
-input,select,button{width:100%;padding:12px;margin:6px 0;border:1px solid #647a9e;border-radius:8px;font-size:15px}
+input,select,button{
+ width:100%;padding:12px;margin:6px 0;
+ border:1px solid #647a9e;border-radius:8px;font-size:15px
+}
 button{background:#e94352;color:white;border:0;font-weight:bold}
 button.secondary{background:#405477}
 button.danger{background:#7e3441}
-button:disabled{opacity:.5}
+button:disabled{opacity:.4}
 .hidden{display:none!important}
-.item{background:#263958;padding:12px;margin:9px 0;border-radius:9px;overflow-wrap:anywhere}
+.item{
+ background:#263958;padding:12px;margin:9px 0;
+ border-radius:9px;overflow-wrap:anywhere
+}
 .actions{display:flex;gap:8px}
 .actions button{flex:1}
 .stat{padding:8px 0;border-bottom:1px solid #405477}
@@ -30,6 +43,7 @@ button:disabled{opacity:.5}
 .tabs button{flex:1;min-width:100px}
 .rank{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .rank strong{color:#ffd66b}
+.notice{color:#ffd66b;font-size:13px}
 </style>
 </head>
 <body>
@@ -45,7 +59,9 @@ button:disabled{opacity:.5}
 <select id="member">
 <option value="">メンバーを読み込み中...</option>
 </select>
+<p id="memberLock" class="small"></p>
 <button id="apply">出席を申請する</button>
+<p id="applyNotice" class="notice"></p>
 </div>
 
 <div class="panel">
@@ -71,7 +87,7 @@ button:disabled{opacity:.5}
 <div class="panel">
 <h2>📋 出席申請管理</h2>
 <button id="refresh" class="secondary">申請一覧を更新</button>
-<div id="requests">読み込み待ち</div>
+<div id="requests"></div>
 </div>
 
 <div class="panel">
@@ -139,6 +155,7 @@ const firebaseConfig={
 
 const ADMIN_UID="nPCMPMkbHyetAGOd0SS9GZKRZRo2";
 const DEFAULT_START_DATE="2026-11-27";
+const LOCK_KEY="amongus_fixed_member";
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
@@ -168,28 +185,118 @@ function dateText(timestamp){
  return timestamp.toDate().toLocaleDateString("ja-JP");
 }
 
+function getLockedMember(){
+ try{
+  return localStorage.getItem(LOCK_KEY)||"";
+ }catch(e){
+  return "";
+ }
+}
+
+function saveLockedMember(id){
+ try{
+  localStorage.setItem(LOCK_KEY,id);
+ }catch(e){
+  msg("このブラウザでは名前を保存できませんでした");
+ }
+}
+
 /* メンバー */
 async function loadMembers(){
  const snap=await getDocs(collection(db,"members"));
  memberCache=[];
  const select=$("member");
  const oldValue=select.value;
- select.innerHTML='<option value="">メンバーを選択</option>';
+ const locked=getLockedMember();
 
  snap.forEach(d=>{
   const x={id:d.id,...d.data()};
   memberCache.push(x);
+ });
+
+ let validLock=memberCache.some(m=>m.id===locked);
+
+ if(locked&&!validLock){
+  localStorage.removeItem(LOCK_KEY);
+ }
+
+ select.innerHTML='<option value="">メンバーを選択</option>';
+
+ memberCache.forEach(x=>{
   const o=document.createElement("option");
-  o.value=d.id;
+  o.value=x.id;
   o.textContent=x.name;
   select.appendChild(o);
  });
 
- if(memberCache.some(m=>m.id===oldValue))select.value=oldValue;
+ if(validLock){
+  select.value=locked;
+  select.disabled=true;
+  $("memberLock").textContent=
+   "🔒 この端末では「"+
+   memberCache.find(m=>m.id===locked).name+
+   "」に固定されています";
+ }else{
+  select.disabled=false;
+  if(memberCache.some(m=>m.id===oldValue)){
+   select.value=oldValue;
+  }
+  $("memberLock").textContent=
+   "初回の出席申請後、この端末では名前が固定されます。";
+ }
+
  if(admin)renderMembers();
 }
 
-/* 公開用データ */
+/* 休日・テスト期間 */
+function isExcluded(date){
+ if(holidayCache.some(x=>x.date===date))return true;
+ return testCache.some(x=>date>=x.start&&date<=x.end);
+}
+
+function updateApplyState(){
+ const blocked=isExcluded(today());
+ const locked=getLockedMember();
+
+ $("apply").disabled=blocked||!memberCache.length;
+
+ if(blocked){
+  $("applyNotice").textContent=
+   "本日は休日またはテスト期間のため、出席申請できません。";
+ }else{
+  $("applyNotice").textContent="";
+ }
+}
+
+/* Firebaseルールで確認するためのブロック日一覧を同期 */
+async function syncBlockedDates(){
+ const dates=new Set();
+
+ holidayCache.forEach(x=>{
+  if(x.date)dates.add(x.date);
+ });
+
+ testCache.forEach(x=>{
+  if(!x.start||!x.end)return;
+
+  let d=new Date(x.start+"T12:00:00");
+  const end=new Date(x.end+"T12:00:00");
+
+  while(d<=end){
+   const key=d.getFullYear()+"-"+
+    String(d.getMonth()+1).padStart(2,"0")+"-"+
+    String(d.getDate()).padStart(2,"0");
+   dates.add(key);
+   d.setDate(d.getDate()+1);
+  }
+ });
+
+ await setDoc(doc(db,"settings","calendar"),{
+  blockedDates:[...dates]
+ });
+}
+
+/* 公開データ */
 async function loadPublicData(){
  const results=await Promise.all([
   getDocs(collection(db,"public_attendance")),
@@ -212,30 +319,7 @@ async function loadPublicData(){
   :DEFAULT_START_DATE;
 
  renderPublicData();
-}
-
-/* 管理者の承認済み記録を公開用コレクションへ同期 */
-async function syncPublicAttendance(){
- for(const r of requestCache){
-  const ref=doc(db,"public_attendance",r.id);
-
-  if(r.status==="approved"){
-   await setDoc(ref,{
-    memberId:r.memberId||"",
-    name:r.name||"名前不明",
-    attendanceDate:r.attendanceDate||"",
-    status:"approved",
-    createdAt:r.createdAt||serverTimestamp()
-   });
-  }else{
-   await deleteDoc(ref).catch(()=>{});
-  }
- }
-}
-
-function isExcluded(date){
- if(holidayCache.some(x=>x.date===date))return true;
- return testCache.some(x=>date>=x.start&&date<=x.end);
+ updateApplyState();
 }
 
 function getEligibleDates(){
@@ -249,6 +333,7 @@ function getEligibleDates(){
   const key=d.getFullYear()+"-"+
    String(d.getMonth()+1).padStart(2,"0")+"-"+
    String(d.getDate()).padStart(2,"0");
+
   if(!isExcluded(key))dates.push(key);
  }
  return dates;
@@ -260,6 +345,7 @@ function renderPublicData(){
 
  if(publicMode==="ranking"){
   const dates=getEligibleDates();
+
   const ranking=memberCache.map(m=>{
    const attended=new Set(
     publicCache
@@ -267,6 +353,7 @@ function renderPublicData(){
      .map(r=>r.attendanceDate)
      .filter(d=>d&&dates.includes(d))
    );
+
    return {
     name:m.name,
     count:attended.size,
@@ -331,6 +418,7 @@ $("showRanking").onclick=()=>{
  publicMode="ranking";
  renderPublicData();
 };
+
 $("showHistory").onclick=()=>{
  publicMode="history";
  renderPublicData();
@@ -346,10 +434,25 @@ $("apply").onclick=async()=>{
   return;
  }
 
+ if(isExcluded(today())){
+  msg("本日は休日またはテスト期間のため申請できません");
+  updateApplyState();
+  return;
+ }
+
+ const locked=getLockedMember();
+
+ if(locked&&locked!==id){
+  msg("この端末では登録済みの名前しか使えません");
+  return;
+ }
+
  $("apply").disabled=true;
  msg("申請しています...");
 
  try{
+  saveLockedMember(id);
+
   const requestId=id+"_"+today();
 
   await setDoc(doc(db,"attendance_requests",requestId),{
@@ -361,15 +464,16 @@ $("apply").onclick=async()=>{
    createdAt:serverTimestamp()
   });
 
+  await loadMembers();
   msg("出席申請できました！");
  }catch(e){
   if(e.code==="permission-denied"){
-   msg("今日はすでに申請済みか、申請できません。");
+   msg("今日はすでに申請済みか、休日・テスト期間中です。");
   }else{
    msg("申請エラー："+e.message);
   }
  }finally{
-  $("apply").disabled=false;
+  updateApplyState();
  }
 };
 
@@ -398,7 +502,8 @@ function showAdmin(){
  $("login").classList.toggle("hidden",admin);
  $("email").classList.toggle("hidden",admin);
  $("password").classList.toggle("hidden",admin);
- $("adminStatus").textContent=admin?"管理者ログイン中":"ログインしていません";
+ $("adminStatus").textContent=
+  admin?"管理者ログイン中":"ログインしていません";
 }
 
 $("logout").onclick=async()=>{
@@ -435,7 +540,8 @@ async function loadRequests(){
   title.textContent=x.name||"名前不明";
 
   const info=document.createElement("p");
-  info.textContent="状態："+(x.status||"不明")+" / 日付："+(x.attendanceDate||dateText(x.createdAt));
+  info.textContent="状態："+(x.status||"不明")+
+   " / 日付："+(x.attendanceDate||dateText(x.createdAt));
 
   item.append(title,info);
 
@@ -465,8 +571,10 @@ async function changeStatus(id,status){
   await updateDoc(doc(db,"attendance_requests",id),{status});
 
   const original=requestCache.find(r=>r.id===id);
+
   if(original){
    const publicRef=doc(db,"public_attendance",id);
+
    if(status==="approved"){
     await setDoc(publicRef,{
      memberId:original.memberId||"",
@@ -496,7 +604,7 @@ async function renderMembers(){
   const item=document.createElement("div");
   item.className="item";
 
-  const name=document.createElement("span");
+  const name=document.createElement("strong");
   name.textContent=x.name;
 
   const del=document.createElement("button");
@@ -504,10 +612,34 @@ async function renderMembers(){
   del.textContent="削除";
 
   del.onclick=async()=>{
-   if(!confirm(x.name+"を削除しますか？"))return;
+   if(!confirm(
+    x.name+"を削除しますか？\n"+
+    "このメンバーの出席申請と出席履歴もすべて削除されます。"
+   ))return;
+
    try{
+    const requests=await getDocs(collection(db,"attendance_requests"));
+    const publicRecords=await getDocs(collection(db,"public_attendance"));
+
+    for(const d of requests.docs){
+     if(d.data().memberId===x.id){
+      await deleteDoc(doc(db,"attendance_requests",d.id));
+     }
+    }
+
+    for(const d of publicRecords.docs){
+     if(d.data().memberId===x.id){
+      await deleteDoc(doc(db,"public_attendance",d.id));
+     }
+    }
+
     await deleteDoc(doc(db,"members",x.id));
-    msg("メンバーを削除しました");
+
+    if(getLockedMember()===x.id){
+     localStorage.removeItem(LOCK_KEY);
+    }
+
+    msg("メンバーとその出席記録を削除しました");
     await refreshAll();
    }catch(e){
     msg("削除できません："+e.message);
@@ -521,6 +653,7 @@ async function renderMembers(){
 
 $("addMember").onclick=async()=>{
  const name=$("newMember").value.trim();
+
  if(!name){
   msg("名前を入力してください");
   return;
@@ -560,7 +693,11 @@ async function loadHolidays(){
 
 $("addHoliday").onclick=async()=>{
  const date=$("holidayDate").value;
- if(!date){msg("日付を選択してください");return;}
+
+ if(!date){
+  msg("日付を選択してください");
+  return;
+ }
 
  try{
   await addDoc(collection(db,"holidays"),{
@@ -568,10 +705,13 @@ $("addHoliday").onclick=async()=>{
    name:$("holidayName").value.trim()||"休日",
    createdAt:serverTimestamp()
   });
+
   $("holidayName").value="";
-  msg("休日を登録しました");
   await refreshAll();
- }catch(e){msg("休日を登録できません："+e.message);}
+  msg("休日を登録しました");
+ }catch(e){
+  msg("休日を登録できません："+e.message);
+ }
 };
 
 /* テスト期間 */
@@ -584,7 +724,8 @@ async function loadTests(){
   item.className="item";
 
   const text=document.createElement("span");
-  text.textContent=(x.name||"テスト期間")+"："+x.start+" ～ "+x.end;
+  text.textContent=(x.name||"テスト期間")+
+   "："+x.start+" ～ "+x.end;
 
   const del=document.createElement("button");
   del.className="danger";
@@ -611,32 +752,47 @@ $("addTest").onclick=async()=>{
    name:$("testName").value.trim()||"テスト期間",
    createdAt:serverTimestamp()
   });
+
   $("testName").value="";
-  msg("テスト期間を登録しました");
   await refreshAll();
- }catch(e){msg("テスト期間を登録できません："+e.message);}
+  msg("テスト期間を登録しました");
+ }catch(e){
+  msg("テスト期間を登録できません："+e.message);
+ }
 };
 
 async function removeRecord(col,id){
  try{
   await deleteDoc(doc(db,col,id));
-  msg("削除しました");
   await refreshAll();
- }catch(e){msg("削除できません："+e.message);}
+  msg("削除しました");
+ }catch(e){
+  msg("削除できません："+e.message);
+ }
 }
 
 /* 集計開始日 */
 $("saveRankingStart").onclick=async()=>{
  const date=$("rankingStart").value;
- if(!date){msg("集計開始日を選択してください");return;}
- if(date>today()){msg("未来の日付は設定できません");return;}
+
+ if(!date){
+  msg("集計開始日を選択してください");
+  return;
+ }
+
+ if(date>today()){
+  msg("未来の日付は設定できません");
+  return;
+ }
 
  try{
   await setDoc(doc(db,"settings","attendance"),{startDate:date});
   rankingStartDate=date;
   renderPublicData();
   msg("集計開始日を保存しました！");
- }catch(e){msg("保存できません："+e.message);}
+ }catch(e){
+  msg("保存できません："+e.message);
+ }
 };
 
 /* 管理者データ更新 */
@@ -645,6 +801,7 @@ async function refreshAll(){
 
  try{
   await loadMembers();
+
   const snap=await getDocs(query(
    collection(db,"attendance_requests"),
    orderBy("createdAt","desc")
@@ -655,23 +812,49 @@ async function refreshAll(){
 
   await syncPublicAttendance();
   await loadPublicData();
+
+  /* 古い休日・テスト期間も申請禁止ルールに反映 */
+  await syncBlockedDates();
+
   await loadRequests();
   await loadHolidays();
   await loadTests();
 
   $("rankingStart").value=rankingStartDate;
+  updateApplyState();
  }catch(e){
   msg("データ取得エラー："+e.message);
  }
 }
 
+async function syncPublicAttendance(){
+ for(const r of requestCache){
+  const ref=doc(db,"public_attendance",r.id);
+
+  if(r.status==="approved"){
+   await setDoc(ref,{
+    memberId:r.memberId||"",
+    name:r.name||"名前不明",
+    attendanceDate:r.attendanceDate||"",
+    status:"approved",
+    createdAt:r.createdAt||serverTimestamp()
+   });
+  }else{
+   await deleteDoc(ref).catch(()=>{});
+  }
+ }
+}
+
 $("refresh").onclick=refreshAll;
 
-/* 認証状態に合わせて画面を準備 */
+/* 認証状態 */
 onAuthStateChanged(auth,async user=>{
  if(!user){
-  try{await signInAnonymously(auth);}
-  catch(e){msg("ログインできません："+e.message);}
+  try{
+   await signInAnonymously(auth);
+  }catch(e){
+   msg("ログインできません："+e.message);
+  }
   return;
  }
 
@@ -682,6 +865,7 @@ onAuthStateChanged(auth,async user=>{
  }else{
   admin=false;
   showAdmin();
+
   try{
    await loadMembers();
    await loadPublicData();
