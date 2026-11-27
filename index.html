@@ -3,98 +3,240 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AMONG US CREW ATTENDANCE</title>
 <style>
-*{box-sizing:border-box}
-body{
- margin:0;
- background:#080d1c;
- color:white;
- font-family:Arial,sans-serif;
- text-align:center;
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+  color: white;
+  background:
+    radial-gradient(circle at 20% 20%, #263b67 0, transparent 35%),
+    linear-gradient(145deg, #050914, #101c35 65%, #080d1a);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
 }
-header{
- background:#141d35;
- padding:25px 12px;
- border-bottom:3px solid #e33b48;
+.panel {
+  width: 100%;
+  max-width: 430px;
+  background: rgba(10, 20, 42, .94);
+  border: 1px solid #48638e;
+  border-radius: 20px;
+  padding: 26px 22px;
+  box-shadow: 0 0 35px #142c55;
 }
-h1{font-size:23px;color:#ff4655}
-.container{
- max-width:430px;
- margin:25px auto;
- padding:20px;
+h1 {
+  text-align: center;
+  color: #ff4b58;
+  font-size: 25px;
+  margin: 0 0 8px;
 }
-.panel{
- background:#17233d;
- border:1px solid #354667;
- border-radius:15px;
- padding:22px;
- margin-bottom:20px;
+.subtitle {
+  text-align: center;
+  color: #9fb6d9;
+  font-size: 12px;
+  letter-spacing: 3px;
+  margin-bottom: 28px;
 }
-.crew{
- font-size:65px;
- margin:10px;
+.crewmate {
+  width: 65px;
+  height: 85px;
+  background: #e94350;
+  border-radius: 28px 28px 20px 20px;
+  margin: 0 auto 20px;
+  position: relative;
+  box-shadow: inset -10px -5px #b72d43;
 }
-select,input,button{
- width:100%;
- padding:14px;
- margin-top:12px;
- border-radius:9px;
- border:none;
- font-size:16px;
+.crewmate:after {
+  content: "";
+  position: absolute;
+  width: 43px;
+  height: 24px;
+  background: #a8e5f5;
+  border: 5px solid #d7f5ff;
+  border-radius: 18px;
+  top: 17px;
+  right: -20px;
 }
-button{
- background:#e33b48;
- color:white;
- font-weight:bold;
- cursor:pointer;
+label {
+  display: block;
+  margin: 15px 0 8px;
+  color: #b8cbea;
+  font-size: 14px;
 }
-button:active{opacity:.7}
-.note{color:#aab7d0;font-size:13px}
-#message{margin-top:15px;color:#75e6a2}
+select, button {
+  width: 100%;
+  padding: 15px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+select {
+  background: #142746;
+  color: white;
+  border: 1px solid #54739f;
+}
+button {
+  margin-top: 20px;
+  border: 0;
+  background: #e94350;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+button:disabled { opacity: .5; }
+button:active { transform: scale(.98); }
+#message {
+  text-align: center;
+  margin-top: 18px;
+  line-height: 1.6;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.footer {
+  text-align: center;
+  color: #7189ac;
+  font-size: 11px;
+  margin-top: 25px;
+}
 </style>
 </head>
 <body>
-<header>
-<h1>AMONG US</h1>
-<div>CREW ATTENDANCE SYSTEM</div>
-</header>
+<main class="panel">
+  <div class="crewmate"></div>
+  <h1>CREW CHECK-IN</h1>
+  <div class="subtitle">AMONG US ATTENDANCE SYSTEM</div>
 
-<div class="container">
-<div class="panel">
-<div class="crew">🚀</div>
-<h2>CREW CHECK-IN</h2>
-<p>今日の出席を申請しよう</p>
+  <label for="member">クルーメイトを選択</label>
+  <select id="member">
+    <option value="">メンバーを選んでください</option>
+  </select>
 
-<select id="member">
-<option value="">メンバーを選択</option>
-<option>テストメンバー</option>
-</select>
+  <button id="send">出席を申請する</button>
+  <div id="message">宇宙船への乗船を確認します。</div>
+  <div class="footer">MIRA HQ  •  CREW MANAGEMENT</div>
+</main>
 
-<button onclick="submitAttendance()">出席を申請する</button>
-<div id="message"></div>
-</div>
+<script type="module">
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
 
-<div class="panel">
-<h3>MISSION STATUS</h3>
-<p>出席申請を送信すると、管理者が確認します。</p>
-<p class="note">承認された出席のみ集計されます。</p>
-</div>
-</div>
+import {
+  getAuth,
+  signInAnonymously
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
 
-<script>
-function submitAttendance(){
- const name=document.getElementById("member").value;
- const message=document.getElementById("message");
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  where,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
- if(!name){
-  message.textContent="メンバーを選択してください";
-  return;
- }
+const firebaseConfig = {
+  apiKey: "AIzaSyDNzOhy5a5Q9xvX_khXCrQIgkgFBn9TyvE",
+  authDomain: "amongus-crew-attendance.firebaseapp.com",
+  projectId: "amongus-crew-attendance",
+  storageBucket: "amongus-crew-attendance.firebasestorage.app",
+  messagingSenderId: "560094086894",
+  appId: "1:560094086894:web:683d51d9b3648054d5d5ff"
+};
 
- message.textContent=name+" さんの申請を受け付けました！（仮表示）";
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const memberSelect = document.getElementById("member");
+const sendButton = document.getElementById("send");
+const message = document.getElementById("message");
+
+let currentUser = null;
+
+async function start() {
+  try {
+    const result = await signInAnonymously(auth);
+    currentUser = result.user;
+
+    const snapshot = await getDocs(collection(db, "members"));
+
+    memberSelect.innerHTML =
+      '<option value="">メンバーを選んでください</option>';
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (!data.name) return;
+
+      const option = document.createElement("option");
+      option.value = doc.id;
+      option.textContent = data.name;
+      memberSelect.appendChild(option);
+    });
+
+    message.textContent = "クルーメイトを選択してください。";
+  } catch (error) {
+    console.error(error);
+    message.textContent =
+      "接続できませんでした。管理者に確認してください。";
+  }
 }
+
+sendButton.addEventListener("click", async () => {
+  const memberId = memberSelect.value;
+
+  if (!currentUser) {
+    message.textContent = "接続中です。少し待ってください。";
+    return;
+  }
+
+  if (!memberId) {
+    message.textContent = "メンバーを選択してください。";
+    return;
+  }
+
+  sendButton.disabled = true;
+  message.textContent = "申請を送信しています...";
+
+  try {
+    const memberDoc = await getDocs(
+      query(
+        collection(db, "members"),
+        where("__name__", "==", memberId)
+      )
+    );
+
+    if (memberDoc.empty) {
+      throw new Error("Member not found");
+    }
+
+    const memberName = memberDoc.docs[0].data().name;
+
+    await addDoc(collection(db, "attendance_requests"), {
+      memberId: memberId,
+      name: memberName,
+      uid: currentUser.uid,
+      status: "pending",
+      createdAt: serverTimestamp()
+    });
+
+    message.textContent =
+      "申請を受け付けました！管理者の確認をお待ちください。";
+  } catch (error) {
+    console.error(error);
+    message.textContent =
+      "申請できませんでした。Firestoreのルール設定を確認してください。";
+  } finally {
+    sendButton.disabled = false;
+  }
+});
+
+start();
 </script>
 </body>
 </html>
+
